@@ -6,6 +6,9 @@ import Parser
 
 import Data.List (isInfixOf, intercalate)
 
+import Test.Hspec
+import qualified Test.QuickCheck as Q
+
 main :: IO ()
 main = putStrLn "test"
 
@@ -15,8 +18,6 @@ randFormula = fst . runGen (genFormula maxFormDepth) . mkSeed
 test x = either (\_ -> False) (\form -> form == randFormula x) $ parseFormula $ show $ randFormula x
 
 testRange xs = all (== True) $ map test xs
-
-
 
 showNoParen (Atomic p []) = p
 showNoParen (Atomic p ts) = p ++ "(" ++ (intercalate "," $ map show $ ts) ++ ")"
@@ -28,8 +29,10 @@ showNoParen (Bicond l r)  = showNoParen l ++ " <-> " ++ showNoParen r
 showNoParen (All v f)     = "All "  ++ v ++ "." ++ showNoParen f
 showNoParen (Some v f)    = "Some " ++ v ++ "." ++ showNoParen f
 
-
-
+testParse :: IO ()
+testParse = hspec $ do
+                describe "a" $ do
+                    it "b" $ Q.forAll Q.arbitrary test
 
 
 
