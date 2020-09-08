@@ -1,15 +1,16 @@
 module Generator
-    ( Gen(..), genFormula, maxFormDepth, mkSeed, genAtomic
+    ( Gen(..), genFormula, maxFormDepth, mkSeed, genFromList
     ) where
 
 import FOL
 import Data.Char (intToDigit, chr, ord)
+import Control.Monad (replicateM)
 
 newtype Seed = Seed { unSeed :: Integer }
   deriving (Eq,Show)
 
 mkSeed :: Integer -> Seed
-mkSeed n = Seed n
+mkSeed = Seed
 
 numToLower :: Integer -> Char
 numToLower = chr . (ord 'a' + ) . (`mod` 26) . fromIntegral
@@ -30,6 +31,7 @@ instance Applicative Gen where
     genF <*> genA = Gen $ \s -> let (f,s') = runGen genF s in runGen (fmap f genA) s'
 
 instance Monad Gen where
+    return = pure
     genA >>= f = Gen $ \s -> let (x,s1) = runGen genA s in runGen (f x) s1
 
 genInteger :: Gen Integer
@@ -47,6 +49,11 @@ genDigit = numToDigit <$> genInteger
 genRange :: Int -> Gen Int -- 0-n
 genRange n = (\x -> fromIntegral x `mod` (n+1)) <$> genInteger
 
+genFromList :: [a] -> Gen a
+genFromList [] = undefined
+genFromList ls = do r <- genRange $ length ls - 1
+                    return $ ls !! r
+
 genBool :: Gen Bool
 genBool = (== 1) <$> genRange 1
 
@@ -62,7 +69,8 @@ maxFormDepth :: Int
 maxFormDepth  = 5
 
 genId :: Gen Char -> Gen String
-genId charGen = genRange maxIndexCount >>= \r -> sequence $ charGen : replicate r genDigit
+genId charGen = do r <- genRange maxIndexCount
+                   (:) <$> charGen <*> replicateM r genDigit
 
 genVarId :: Gen VarId
 genVarId = genId genLower
@@ -72,16 +80,19 @@ genPredId = genId genUpper
 
 genTerm :: Int -> Gen Term
 genTerm 0        = genVar
-genTerm maxDepth = genBool >>= \b -> if b then genVar else genFunc (maxDepth-1)
+genTerm maxDepth = do b <- genBool
+                      if b then genVar else genFunc $ maxDepth - 1
 
 genVar :: Gen Term
 genVar = Var <$> genVarId
 
 genFunc :: Int -> Gen Term
-genFunc maxDepth = genRange (maxParamCount-1) >>= \r -> Function <$> genVarId <*> (sequence $ replicate (r+1) $ genTerm maxDepth)
+genFunc maxDepth = do r <- genRange (maxParamCount-1)
+                      Function <$> genVarId <*> (replicateM (r+1) $ genTerm maxDepth)
 
 genAtomic :: Gen Formula
-genAtomic = genRange maxParamCount >>= \r -> Atomic <$> genPredId <*> (sequence $ replicate r $ genTerm maxTermDepth)
+genAtomic = do r <- genRange maxParamCount
+               Atomic <$> genPredId <*> (replicateM r $ genTerm maxTermDepth)
 
 genFormula :: Int -> Gen Formula
 genFormula 0        = genAtomic

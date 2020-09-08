@@ -12,7 +12,7 @@ data Term = Var VarId | Function VarId [Term]
 
 instance Show Term where
     show (Var v) = v
-    show (Function f ts) = f ++ "(" ++ (intercalate "," $ map show $ ts) ++ ")"
+    show (Function f ts) = f ++ "(" ++ intercalate "," (map show ts) ++ ")"
 
 data Formula = Atomic PredId [Term]
              | Neg    Formula
@@ -26,7 +26,7 @@ data Formula = Atomic PredId [Term]
     
 instance Show Formula where
     show (Atomic p []) = p
-    show (Atomic p ts) = p ++ "(" ++ (intercalate "," $ map show $ ts) ++ ")"
+    show (Atomic p ts) = p ++ "(" ++ intercalate "," (map show ts) ++ ")"
     show (Neg f)       = "-" ++ show' f ++ ""
     show (And l r)     = show' l ++ " & "   ++ show' r
     show (Or l r)      = show' l ++ " | "   ++ show' r

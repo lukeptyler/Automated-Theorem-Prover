@@ -1,8 +1,11 @@
 module Parser where
+--    ( parseFormula, parseError
+--    ) where
 
 import FOL
 import Data.Char (isLower, isUpper, isDigit, isSpace)
 import Data.List (isPrefixOf, isInfixOf, uncons)
+import Data.Either (isLeft)
 import Control.Applicative (Alternative(..))
 
 data Token = AtomicToken String
@@ -39,9 +42,9 @@ instance Monad Match where
                         match (f a) str'
 
 instance Alternative Match where
-    empty = Match $ \_ -> Nothing
+    empty = Match $ const Nothing
 
-    matchA <|> matchB = Match $ \str -> (match matchA str) <|> (match matchB str)
+    matchA <|> matchB = Match $ \str -> match matchA str <|> match matchB str
 
 matchCond :: (Char -> Bool) -> Match Char
 matchCond cond = Match $ \str -> case str of 
@@ -59,7 +62,7 @@ matchUpper :: Match Char
 matchUpper = matchCond isUpper
 
 matchStr :: String -> Match String
-matchStr str = sequence $ map matchChar str
+matchStr = mapM matchChar
 
 matchNum :: Match String
 matchNum = Match $ \str -> Just $ span isDigit str
@@ -94,7 +97,7 @@ matchGroup = do start <- lookAhead '('
                 else return ""
     
 matchInside :: Match String
-matchInside = do inside <- matchUntil (\x -> x `elem` "()")
+matchInside = do inside <- matchUntil (`elem` "()")
                  end <- lookAhead ')'
                  if end 
                  then (inside ++) <$> matchStr ")" 
@@ -103,17 +106,20 @@ matchInside = do inside <- matchUntil (\x -> x `elem` "()")
 
 matchAtomicToken :: Match Token
 matchAtomicToken = do pred <- matchPredId
+                      _ <- matchSpaces
                       group <- matchGroup
                       return $ AtomicToken $ pred ++ group
 
 matchAll :: Match Token
-matchAll = do _  <- (matchStr "all " <|> matchStr "All ")
+matchAll = do _  <- matchStr "all " <|> matchStr "All "
+              _  <- matchSpaces
               id <- matchVarId
+              _  <- matchSpaces
               _  <- matchChar '.'
               return $ AllToken id
 
 matchSome :: Match Token
-matchSome = do _  <- (matchStr "some " <|> matchStr "Some ")
+matchSome = do _  <- matchStr "some " <|> matchStr "Some "
                id <- matchVarId
                _  <- matchChar '.'
                return $ SomeToken id
@@ -139,8 +145,7 @@ matchAtomic :: Match Formula
 matchAtomic = do pred <- matchPredId
                  hasGroup <- lookAhead '('
                  if hasGroup
-                 then do _ <- matchSpaces
-                         terms <- matchTermList
+                 then do terms <- matchTermList
                          _ <- matchEmpty
                          return $ Atomic pred terms
                  else do _ <- matchEmpty
@@ -188,7 +193,7 @@ tokenize = Match $ \str -> if null str
 
 parseFormula :: String -> Either ParseError Formula
 parseFormula str
-    | isInfixOf "()" str = Left "Can not contain empty group ()"
+    | "()" `isInfixOf` str = Left "Can not contain empty group ()"
     | otherwise = maybe (Left "Error tokenizing")
                         (\(tokens,_) -> either Left
                                                extractResult $
@@ -211,11 +216,11 @@ parse p@(Parser tokens _ _)
                      parse p'
 
 processToken :: Token -> ParseStep
-processToken (AtomicToken atom) p = if (not. null . tokenList) p && (head $ tokenList p) == OpenToken
+processToken (AtomicToken atom) p = if (not. null . tokenList) p && (head . tokenList) p == OpenToken
                                     then Left "Invalid formula"
                                     else maybe (Left $ "Invalid atomic formula " ++ atom)
                                                (\(form, _) -> pushFormula form p) $
-                                               match matchAtomic atom
+                                               match matchAtomic $ filter (not . isSpace) atom
 processToken ClosedToken p = case uncons $ tokenList p of
                                   Just (AtomicToken _, _) -> Left "Invalid formula"
                                   Just (OpenToken,     _) -> Left "Invalid formula"
@@ -256,13 +261,13 @@ resolveOp (Parser tokenList (op:ops) formStack)
                          (Left "Invalid formula")
                          Right $ 
                          do (f, forms') <- uncons formStack
-                            return $ Parser tokenList ops $ (oneArgForm op f):forms'
+                            return $ Parser tokenList ops $ oneArgForm op f:forms'
     | argCount op == 2 = maybe 
                          (Left "Invalid formula")
                          Right $ 
                          do (r, forms')  <- uncons formStack
                             (l, forms'') <- uncons forms'
-                            return $ Parser tokenList ops $ (twoArgForm op l r):forms''
+                            return $ Parser tokenList ops $ twoArgForm op l r:forms''
     where
         oneArgForm :: Token -> Formula -> Formula
         oneArgForm NegToken f      = Neg  f
@@ -294,101 +299,5 @@ argCount BicondToken   = 2
 argCount (AllToken _)  = 1
 argCount (SomeToken _) = 1
 
-{- ONE PASS PARSER
-data Parser = Parser [Token] [Formula]
-    deriving (Show)
-
-type ParseError  = String
-type ParseResult = Either ParseError Formula
-
-type ParseStep = (String, Parser)
-type ParseStepResult = Either ParseError ParseStep
-
-data Precedence = Prec {prec :: Int, leftAssoc :: Bool}
-
-parseFormula :: String -> ParseResult
-parseFormula str
-    | isInfixOf "()" str = Left "Can not contain empty group ()"
-    | otherwise = either (\err -> Left err) getResult $ parseStep (str, Parser [] [])
-
-parseStep :: ParseStep -> ParseStepResult
-parseStep step@("", Parser ops _)
-    | length ops == 0   = Right step
-    | otherwise         = do step' <- resolveOp step
-                             parseStep step'
-parseStep (str, parser) = do step' <- maybe 
-                                      (Left $ "Error matching token from " ++ str)
-                                      (\(token, str') -> parseToken token (str', parser)) $
-                                      match matchToken str
-                             parseStep step'
-
-getResult :: ParseStep -> ParseResult
-getResult (str, Parser ops forms)
-    | (not . null) str || (not . null) ops || length forms /= 1 = Left "Invalid formula1"
-    | otherwise = Right $ head forms
-
-parseToken :: Token -> ParseStep -> ParseStepResult
-parseToken (AtomicToken atom) step@(str, _) = case match matchToken str of
-                                              Just (OpenToken, _) -> Left "Invalid formula"
-                                              _ -> maybe (Left $ "Invalid atomic formula " ++ atom) 
-                                                   (\(form, str') -> if null str' then pushFormula form step else Left $ "Invalid atomic formula " ++ atom) $ 
-                                                   match matchAtomic atom
-parseToken ClosedToken step@(str, _) = case match matchToken str of
-                                       Just (AtomicToken _, _) -> Left "Invalid formula"
-                                       Just (OpenToken, _)     -> Left "Invalid formula"
-                                       _ -> resolveGroup step
-parseToken op step = pushOp op step
-
-pushFormula :: Formula -> ParseStep -> ParseStepResult
-pushFormula formula (str, Parser ops forms) = Right (str, Parser ops $ formula:forms)
-
-pushOp :: Token -> ParseStep -> ParseStepResult
-pushOp OpenToken (str, Parser ops forms)        = Right (str, Parser (OpenToken:ops) forms)
-pushOp push (str, Parser [] forms)              = Right (str, Parser [push] forms)
-pushOp push (str, Parser (OpenToken:ops) forms) = Right (str, Parser (push:OpenToken:ops) forms)
-pushOp push step@(str, Parser (op:ops) forms)
-    | prec precOp > prec precPush || 
-        (prec precOp == prec precPush && leftAssoc precOp) = do step' <- resolveOp step
-                                                                pushOp push step'
-    | otherwise = Right (str, Parser (push:op:ops) forms)
-    where
-        precOp   = precedence op
-        precPush = precedence push
-
-resolveGroup :: ParseStep -> ParseStepResult
-resolveGroup step@(_, Parser ops _)
-    | OpenToken `elem` ops = resolveGroup' step
-    | otherwise            = Left "Unbalanced parantheses"
-    where
-        resolveGroup' :: ParseStep -> ParseStepResult
-        resolveGroup' (str, Parser (OpenToken:ops) forms) = Right (str, Parser ops forms)
-        resolveGroup' step = do step' <- resolveOp step
-                                resolveGroup' step'
-
-resolveOp :: ParseStep -> ParseStepResult
-resolveOp (_,   Parser [] _) = Left "Invalid formula"
-resolveOp (_,   Parser (OpenToken:_) _) = Left "Unbalanced parentheses"
-resolveOp (str, Parser (op:ops) forms)
-    | argCount op == 1 = maybe 
-                         (Left "Invalid formula")
-                         Right $ 
-                         uncons forms >>= 
-                            \(f, forms') -> Just $ (str, Parser ops $ (oneArgForm op f):forms')
-    | argCount op == 2 = maybe 
-                         (Left "Invalid formula")
-                         Right $ 
-                         uncons forms >>= 
-                            \(r, forms') -> uncons forms' >>=
-                            \(l, forms'') -> Just $ (str, Parser ops $ (twoArgForm op l r):forms'')
-    where
-        oneArgForm :: Token -> Formula -> Formula
-        oneArgForm NegToken f      = Neg  f
-        oneArgForm (AllToken x) f  = All  x f
-        oneArgForm (SomeToken x) f = Some x f
-
-        twoArgForm :: Token -> Formula -> Formula -> Formula
-        twoArgForm AndToken    l r = And    l r
-        twoArgForm OrToken     l r = Or     l r
-        twoArgForm ImpToken    l r = Imp    l r
-        twoArgForm BicondToken l r = Bicond l r
--}
+parseError :: Either ParseError Formula -> Bool
+parseError = isLeft
