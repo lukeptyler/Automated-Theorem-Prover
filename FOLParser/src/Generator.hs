@@ -53,13 +53,13 @@ genBool = (== 1) <$> genRange 1
 -------------------------------
 
 maxIndexCount :: Int
-maxIndexCount = 0
+maxIndexCount = 1
 maxParamCount :: Int
 maxParamCount = 2
 maxTermDepth :: Int
 maxTermDepth  = 1
 maxFormDepth :: Int
-maxFormDepth  = 3
+maxFormDepth  = 5
 
 genId :: Gen Char -> Gen String
 genId charGen = genRange maxIndexCount >>= \r -> sequence $ charGen : replicate r genDigit
