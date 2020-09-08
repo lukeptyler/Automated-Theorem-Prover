@@ -12,7 +12,10 @@ main = hspec $ do
             it "Fails on empty string" $ parseFormula "" `shouldSatisfy` parseError
 
             it "Parses atomic formula: P(f(x,y),z)" $ 
-                parseFormula "P(f(x,y),z)" `shouldBe` Right (Atomic "P" [Function "f" [Var "x", Var "y"], Var "z"])
+                parseFormula "P(f(x,y),z)" `shouldBe` Right (Atomic "P" [Function "f" [Function "x" [], Function "y" []], Function "z" []])
+
+            it "Fails on invalid atomic formula: P(x,y" $
+                parseFormula "P(x,y" `shouldSatisfy` parseError
 
             it "Fails on invalid atomic formula: x" $
                 parseFormula "x" `shouldSatisfy` parseError
@@ -21,10 +24,10 @@ main = hspec $ do
                 parseFormula "P(x, (Q & R))" `shouldSatisfy` parseError
 
             it "Parses formula: P(x) -> (Q & all y.R(y))" $
-                parseFormula "P(x) -> (Q & all y.R(y))" `shouldBe` Right (Imp (Atomic "P" [Var "x"]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P(x) -> (Q & all y.R(y))" `shouldBe` Right (Imp (Atomic "P" [Function "x" []]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
 
             it "Ignores whitespace separating tokens: P  (  x)  \\n   -> (   Q &    all y  \\t  .  R (   y))" $
-                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" `shouldBe` Right (Imp (Atomic "P" [Var "x"]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" `shouldBe` Right (Imp (Atomic "P" [Function "x" []]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
 
             it "Fails on whitespace inside tokens: P - > Q" $
                 parseFormula "P - > Q" `shouldSatisfy` parseError
@@ -59,9 +62,9 @@ main = hspec $ do
             it "Fails on invalid formula: (P & Q)(R -> S)" $
                 parseFormula "(P & Q)(R -> S)" `shouldSatisfy` parseError
 
-            it "Correctly infers operator precedence: -P & Q -> R(x) | S <-> all x.some y. T" $
-                parseFormula "-P & Q -> R(x) | S <-> all x.some y. T" `shouldBe` Right (
-                    Bicond (Imp (And (Neg (Atomic "P" [])) (Atomic "Q" [])) (Or (Atomic "R" [Var "x"]) (Atomic "S" []))) (All "x" (Some "y" (Atomic "T" [])))
+            it "Correctly infers operator precedence: -P & Q -> R(w) | S <-> all x.some y. T(x,z)" $
+                parseFormula "-P & Q -> R(w) | S <-> all x.some y. T(x,z)" `shouldBe` Right (
+                    Bicond (Imp (And (Neg (Atomic "P" [])) (Atomic "Q" [])) (Or (Atomic "R" [Function "w" []]) (Atomic "S" []))) (All "x" (Some "y" (Atomic "T" [Var "x",Function "z" []])))
                 )
 
             modifyMaxSuccess (const 100000) $
@@ -72,6 +75,6 @@ randFormula :: Integer -> Formula
 randFormula = fst . runGen (genFormula maxFormDepth) . mkSeed
 
 testParse :: Integer -> Bool
-testParse s = either (const False) (== randForm) $ parseFormula $ show randForm
+testParse s = either (const False) (== freeVarToConst randForm) $ parseFormula $ show randForm
     where
         randForm = fst $ runGen (genFormula maxFormDepth) $ mkSeed s

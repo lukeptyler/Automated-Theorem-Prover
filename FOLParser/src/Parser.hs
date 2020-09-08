@@ -84,6 +84,9 @@ lookAhead c = Match $ \str -> maybe
                               (\(h,_) -> Just (c==h,str)) $ 
                               uncons str
 
+eof :: Match Bool
+eof = Match $ \str -> if null str then Just (True,"") else Just (False,str)
+
 matchVarId :: Match VarId
 matchVarId = (:) <$> matchLower <*> matchNum
 
@@ -97,12 +100,15 @@ matchGroup = do start <- lookAhead '('
                 else return ""
     
 matchInside :: Match String
-matchInside = do inside <- matchUntil (`elem` "()")
-                 end <- lookAhead ')'
-                 if end 
-                 then (inside ++) <$> matchStr ")" 
-                 else do rest <- (++) <$> matchGroup <*> matchInside
-                         return $ inside ++ rest
+matchInside = do err <- eof
+                 if err
+                 then empty
+                 else do inside <- matchUntil (`elem` "()")
+                         end <- lookAhead ')'
+                         if end 
+                         then (inside ++) <$> matchStr ")" 
+                         else do rest <- (++) <$> matchGroup <*> matchInside
+                                 return $ inside ++ rest
 
 matchAtomicToken :: Match Token
 matchAtomicToken = do pred <- matchPredId
@@ -204,7 +210,7 @@ parseFormula str
 extractResult :: Parser -> Either ParseError Formula
 extractResult p
     | (not . null . tokenList) p || (not . null . opStack) p || (length . formStack) p /= 1 = Left "Invalid formula"
-    | otherwise = Right $ head $ formStack p
+    | otherwise = Right $ freeVarToConst $ head $ formStack p
 
 parse :: ParseStep
 parse p@(Parser tokens _ _)
