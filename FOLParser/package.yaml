@@ -34,9 +34,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - FOLParser
-    - hspec
-    - hspec-core
-    - QuickCheck
+    - containers
 
 tests:
   FOLParser-test:

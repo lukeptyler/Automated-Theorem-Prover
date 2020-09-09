@@ -3,10 +3,9 @@ module Main where
 import FOL
 import Generator
 import Parser
+import Substitution
 
-import Control.Monad
-
-import Data.Either
+import qualified Data.Map.Strict as M
 
 main :: IO ()
 main = putStrLn "FOLParser"
