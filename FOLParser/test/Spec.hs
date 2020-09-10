@@ -7,7 +7,7 @@ import Test.Hspec
 import Test.QuickCheck
 import Test.Hspec.Core.QuickCheck (modifyMaxSuccess)
 
-import qualified Data.Map.Strict as M
+--import qualified Data.Map.Strict as M
 
 main :: IO ()
 main = hspec $ do
@@ -27,10 +27,14 @@ main = hspec $ do
                 parseFormula "P(x, (Q & R))" `shouldSatisfy` parseError
 
             it "Parses formula: P(x) -> (Q & all y.R(y))" $
-                parseFormula "P(x) -> (Q & all y.R(y))" `shouldBe` Right (Imp (Atomic "P" [constant "x"]) (And (proposition "Q") (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P(x) -> (Q & all y.R(y))" 
+                `shouldBe` Right 
+                (Atomic "P" [constant "x"] .-> (proposition "Q" .& univ "y" (Atomic "R" [Var "y"])))
 
             it "Ignores whitespace separating tokens: P  (  x)  \\n   -> (   Q &    all y  \\t  .  R (   y))" $
-                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" `shouldBe` Right (Imp (Atomic "P" [constant "x"]) (And (proposition "Q") (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" 
+                `shouldBe` Right 
+                (Atomic "P" [constant "x"] .-> (proposition "Q" .& univ "y" (Atomic "R" [Var "y"])))
 
             it "Fails on whitespace inside tokens: P - > Q" $
                 parseFormula "P - > Q" `shouldSatisfy` parseError
@@ -66,11 +70,11 @@ main = hspec $ do
                 parseFormula "(P & Q)(R -> S)" `shouldSatisfy` parseError
 
             it "Correctly infers operator precedence: -P & Q -> R(w) | S <-> all x.some y. T(x,z)" $
-                parseFormula "-P & Q -> R(w) | S <-> all x.some y. T(x,z)" `shouldBe` Right (
-                    Bicond (Imp (And (Neg (proposition "P")) (proposition "Q")) (Or (Atomic "R" [constant "w"]) (proposition "S"))) (All "x" (Some "y" (Atomic "T" [Var "x", constant "z"])))
-                )
+                parseFormula "-P & Q -> R(w) | S <-> all x.some y. T(x,z)" 
+                `shouldBe` Right 
+                ((((neg $ proposition "P") .& proposition "Q") .-> (Atomic "R" [constant "w"] .| proposition "S")) .<-> (univ "x" (exist "y" (Atomic "T" [Var "x", constant "z"]))))
 
-            modifyMaxSuccess (const 1000) $
+            modifyMaxSuccess (const 10000) $
                 it "Parsing a random formula should give the same formula" $ 
                 property testParse
 
@@ -113,28 +117,28 @@ main = hspec $ do
 
             it "(P(x) & Q(y)){x/c,y/x} => P(c) & Q(x)" $
                 substF (fromList [("x", constant "c"), ("y", Var "x")])
-                       (And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
-                       `shouldBe` And (Atomic "P" [constant "c"]) (Atomic "Q" [Var "x"])
+                       (Atomic "P" [Var "x"] .& Atomic "Q" [Var "y"])
+                       `shouldBe` Atomic "P" [constant "c"] .& Atomic "Q" [Var "x"]
 
             it "(all x.P(x)){x/c} => all x.P(x)" $
                 substF (singleton "x" $ constant "c")
-                       (All "x" $ Atomic "P" [Var "x"])
-                       `shouldBe` All "x" (Atomic "P" [Var "x"])
+                       (univ "x" $ Atomic "P" [Var "x"])
+                       `shouldBe` univ "x" (Atomic "P" [Var "x"])
 
             it "(some x.(P(x) & Q(y)){x/c, y/a} => some x.(P(x) & Q(a))" $ 
                 substF (fromList [("x", constant "c"), ("y", constant "a")])
-                       (Some "x" $ And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
-                       `shouldBe` Some "x" (And (Atomic "P" [Var "x"]) (Atomic "Q" [constant "a"]))
+                       (exist "x" (Atomic "P" [Var "x"] .& Atomic "Q" [Var "y"]))
+                       `shouldBe` exist "x" (Atomic "P" [Var "x"] .& Atomic "Q" [constant "a"])
 
             it "(some x.P(y)){y/x} => some x1.P(x)" $
                 substF (singleton "y" $ Var "x")
-                       (Some "x" $ Atomic "P" [Var "y"])
-                       `shouldBe` Some "x1" (Atomic "P" [Var "x"])
+                       (exist "x" $ Atomic "P" [Var "y"])
+                       `shouldBe` exist "x1" (Atomic "P" [Var "x"])
 
             it "(all x.(P(x) & Q(y)){x/f(c), y/f(x)} => all x1.(P(x1) & Q(f(x)))" $
                 substF (fromList [("x", Function "f" [constant "c"]), ("y", Function "f" [Var "x"])])
-                       (All "x" $ And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
-                       `shouldBe` All "x1" (And (Atomic "P" [Var "x1"]) (Atomic "Q" [Function "f" [Var "x"]]))
+                       (univ "x" (Atomic "P" [Var "x"] .& Atomic "Q" [Var "y"]))
+                       `shouldBe` univ "x1" (Atomic "P" [Var "x1"] .& Atomic "Q" [Function "f" [Var "x"]])
 
         describe "Unification Tests" $ do
             it "Passes with: x, y => {x/y}" $

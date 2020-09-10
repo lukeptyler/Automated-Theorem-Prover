@@ -2,7 +2,7 @@ module Substitution where
 
 import FOL
 import qualified Data.Map.Strict as M
-import Data.List (nub, delete, intercalate)
+import Data.List (nub, delete, intercalate, intersect)
 
 newtype Subst = Subst (M.Map String Term)
     deriving (Eq)
@@ -37,13 +37,9 @@ varsInTerm (Function _ ts) = nub $ concatMap varsInTerm ts
 
 varsInForm :: Formula -> [VarId]
 varsInForm (Atomic pred ts) = nub $ concatMap varsInTerm ts
-varsInForm (Neg      f) = varsInForm f
-varsInForm (And    l r) = nub $ varsInForm l ++ varsInForm r
-varsInForm (Or     l r) = nub $ varsInForm l ++ varsInForm r
-varsInForm (Imp    l r) = nub $ varsInForm l ++ varsInForm r
-varsInForm (Bicond l r) = nub $ varsInForm l ++ varsInForm r
-varsInForm (All   id f) = delete id $ varsInForm f
-varsInForm (Some  id f) = delete id $ varsInForm f
+varsInForm (Neg        f) = varsInForm f
+varsInForm (Binary _ l r) = nub $ varsInForm l ++ varsInForm r
+varsInForm (Quant _ id f) = delete id $ varsInForm f
 
 nextId :: VarId -> VarId
 nextId (l:n)
@@ -51,22 +47,15 @@ nextId (l:n)
     | otherwise = l : (show $ succ $ (read n :: Int))
 
 renameQuant :: VarId -> Formula -> Formula
-renameQuant rename (All  id f) = All  rename $ substF (singleton id (Var rename)) f
-renameQuant rename (Some id f) = Some rename $ substF (singleton id (Var rename)) f
+renameQuant rename (Quant op id f) = Quant op rename $ substF (singleton id (Var rename)) f
 
 substF :: Subst -> Formula -> Formula
 substF sub (Atomic pred ts) = Atomic pred $ map (substT sub) ts
-substF sub (Neg      f) = Neg $ (substF sub) f
-substF sub (And    l r) = And    ((substF sub) l) ((substF sub) r)
-substF sub (Or     l r) = Or     ((substF sub) l) ((substF sub) r)
-substF sub (Imp    l r) = Imp    ((substF sub) l) ((substF sub) r)
-substF sub (Bicond l r) = Bicond ((substF sub) l) ((substF sub) r)
-substF sub q@(All   id f)
-    | id `elem` varRange sub && any (`elem` varsInForm f) (support sub) = substF sub $ renameQuant (nextId id) q
-    | otherwise = All id $ substF (restrict id sub) f
-substF sub q@(Some  id f)
-    | id `elem` varRange sub && any (`elem` varsInForm f) (support sub) = substF sub $ renameQuant (nextId id) q
-    | otherwise = Some id $ substF (restrict id sub) f
+substF sub (Neg         f)  = Neg $ (substF sub) f
+substF sub (Binary op l r)  = Binary op (substF sub l) (substF sub r)
+substF sub qu@(Quant q id f)
+    | id `elem` varRange sub && not (null $ intersect (varsInForm f) (support sub)) = substF sub $ renameQuant (nextId id) qu
+    | otherwise = Quant q id $ substF (restrict id sub) f
 
 substT :: Subst -> Term -> Term
 substT sub (Function id ts) = Function id $ map (substT sub) ts

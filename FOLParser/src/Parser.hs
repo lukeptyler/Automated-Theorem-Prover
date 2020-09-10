@@ -267,24 +267,24 @@ resolveOp (Parser tokenList (op:ops) formStack)
                          (Left "Invalid formula")
                          Right $ 
                          do (f, forms') <- uncons formStack
-                            return $ Parser tokenList ops $ oneArgForm op f:forms'
+                            return $ Parser tokenList ops $ unary op f:forms'
     | argCount op == 2 = maybe 
                          (Left "Invalid formula")
                          Right $ 
                          do (r, forms')  <- uncons formStack
                             (l, forms'') <- uncons forms'
-                            return $ Parser tokenList ops $ twoArgForm op l r:forms''
+                            return $ Parser tokenList ops $ binary op l r:forms''
     where
-        oneArgForm :: Token -> Formula -> Formula
-        oneArgForm NegToken f      = Neg  f
-        oneArgForm (AllToken x) f  = All  x f
-        oneArgForm (SomeToken x) f = Some x f
+        unary :: Token -> Formula -> Formula
+        unary NegToken f       = Neg  f
+        unary (AllToken id)  f = Quant All  id f
+        unary (SomeToken id) f = Quant Some id f
 
-        twoArgForm :: Token -> Formula -> Formula -> Formula
-        twoArgForm AndToken    l r = And    l r
-        twoArgForm OrToken     l r = Or     l r
-        twoArgForm ImpToken    l r = Imp    l r
-        twoArgForm BicondToken l r = Bicond l r
+        binary :: Token -> Formula -> Formula -> Formula
+        binary AndToken    l r = Binary And    l r
+        binary OrToken     l r = Binary Or     l r
+        binary ImpToken    l r = Binary Imp    l r
+        binary BicondToken l r = Binary Bicond l r
         
 precedence :: Token -> Precedence
 precedence NegToken      = Prec 5 False

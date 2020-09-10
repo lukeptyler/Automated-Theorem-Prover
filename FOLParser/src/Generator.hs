@@ -5,6 +5,7 @@ module Generator
 import FOL
 import Data.Char (intToDigit, chr, ord)
 import Control.Monad (replicateM)
+import Control.Applicative (liftA3)
 
 newtype Seed = Seed { unSeed :: Integer }
   deriving (Eq,Show)
@@ -94,14 +95,22 @@ genAtomic :: Gen Formula
 genAtomic = do r <- genRange maxParamCount
                Atomic <$> genPredId <*> (replicateM r $ genTerm maxTermDepth)
 
+genBinaryOp :: Gen BinaryOp
+genBinaryOp = do r <- genRange 3
+                 case r of
+                    0 -> return And
+                    1 -> return Or
+                    2 -> return Imp
+                    3 -> return Bicond
+
+genQuantifier :: Gen Quantifier
+genQuantifier = do b <- genBool
+                   if b then return All else return Some
+
 genFormula :: Int -> Gen Formula
 genFormula 0        = genAtomic
-genFormula maxDepth = genRange 7 >>= \r -> case r of 
+genFormula maxDepth = genRange 3 >>= \r -> case r of 
     0 -> genAtomic
-    1 -> Neg    <$> genFormula (maxDepth - 1)
-    2 -> And    <$> genFormula (maxDepth - 1) <*> genFormula (maxDepth - 1)
-    3 -> Or     <$> genFormula (maxDepth - 1) <*> genFormula (maxDepth - 1)
-    4 -> Imp    <$> genFormula (maxDepth - 1) <*> genFormula (maxDepth - 1)
-    5 -> Bicond <$> genFormula (maxDepth - 1) <*> genFormula (maxDepth - 1)
-    6 -> All    <$> genVarId <*> genFormula (maxDepth - 1)
-    7 -> Some   <$> genVarId <*> genFormula (maxDepth - 1)
+    1 -> Neg <$> genFormula (maxDepth - 1)
+    2 -> liftA3 Binary genBinaryOp (genFormula $ maxDepth - 1) (genFormula $ maxDepth - 1)
+    3 -> liftA3 Quant genQuantifier genVarId (genFormula $ maxDepth - 1)
