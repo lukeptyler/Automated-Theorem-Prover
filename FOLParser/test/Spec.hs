@@ -15,7 +15,7 @@ main = hspec $ do
             it "Fails on empty string" $ parseFormula "" `shouldSatisfy` parseError
 
             it "Parses atomic formula: P(f(x,y),z)" $ 
-                parseFormula "P(f(x,y),z)" `shouldBe` Right (Atomic "P" [Function "f" [Function "x" [], Function "y" []], Function "z" []])
+                parseFormula "P(f(x,y),z)" `shouldBe` Right (Atomic "P" [Function "f" [constant "x", constant "y"], constant "z"])
 
             it "Fails on invalid atomic formula: P(x,y" $
                 parseFormula "P(x,y" `shouldSatisfy` parseError
@@ -27,10 +27,10 @@ main = hspec $ do
                 parseFormula "P(x, (Q & R))" `shouldSatisfy` parseError
 
             it "Parses formula: P(x) -> (Q & all y.R(y))" $
-                parseFormula "P(x) -> (Q & all y.R(y))" `shouldBe` Right (Imp (Atomic "P" [Function "x" []]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P(x) -> (Q & all y.R(y))" `shouldBe` Right (Imp (Atomic "P" [constant "x"]) (And (proposition "Q") (All "y" (Atomic "R" [Var "y"]))))
 
             it "Ignores whitespace separating tokens: P  (  x)  \\n   -> (   Q &    all y  \\t  .  R (   y))" $
-                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" `shouldBe` Right (Imp (Atomic "P" [Function "x" []]) (And (Atomic "Q" []) (All "y" (Atomic "R" [Var "y"]))))
+                parseFormula "P  (  x)     -> (   Q &    all y    .  R (   y))" `shouldBe` Right (Imp (Atomic "P" [constant "x"]) (And (proposition "Q") (All "y" (Atomic "R" [Var "y"]))))
 
             it "Fails on whitespace inside tokens: P - > Q" $
                 parseFormula "P - > Q" `shouldSatisfy` parseError
@@ -67,53 +67,115 @@ main = hspec $ do
 
             it "Correctly infers operator precedence: -P & Q -> R(w) | S <-> all x.some y. T(x,z)" $
                 parseFormula "-P & Q -> R(w) | S <-> all x.some y. T(x,z)" `shouldBe` Right (
-                    Bicond (Imp (And (Neg (Atomic "P" [])) (Atomic "Q" [])) (Or (Atomic "R" [Function "w" []]) (Atomic "S" []))) (All "x" (Some "y" (Atomic "T" [Var "x",Function "z" []])))
+                    Bicond (Imp (And (Neg (proposition "P")) (proposition "Q")) (Or (Atomic "R" [constant "w"]) (proposition "S"))) (All "x" (Some "y" (Atomic "T" [Var "x", constant "z"])))
                 )
 
-            modifyMaxSuccess (const 100000) $
+            modifyMaxSuccess (const 1000) $
                 it "Parsing a random formula should give the same formula" $ 
                 property testParse
 
         describe "Substitution Tests" $ do
+            it "(x){x/c} => c" $
+                substT (singleton "x" $ constant "c") 
+                       (Var "x") 
+                       `shouldBe` constant "c"
+
+            it "(f(x,c)){x/c} => f(c,c)" $
+                substT (singleton "x" $ constant "c")
+                       (Function "f" [Var "x", constant "c"])
+                       `shouldBe` Function "f" [constant "c", constant "c"]
+
+            it "(f(x,c)){y/c} => f(x,c)" $
+                substT (singleton "y" $ constant "c")
+                       (Function "f" [Var "x", constant "c"])
+                       `shouldBe` Function "f" [Var "x", constant "c"]
+
+            it "(f(x)){x/g(y)} => f(g(y))" $
+                substT (singleton "x" $ Function "g" [Var "y"])
+                       (Function "f" [Var "x"])
+                       `shouldBe` Function "f" [Function "g" [Var "y"]]
+
+            it "(f(x)){x/g(y)}{y/c} => f(g(c))" $
+                substT (singleton "y" $ constant "c")
+                       (substT (singleton "x" $ Function "g" [Var "y"])
+                              (Function "f" [Var "x"]))
+                       `shouldBe` Function "f" [Function "g" [constant "c"]]
+
+            it "{x/g(y), y/c}{y/a, z/w} => {x/g(a), y/c, z/w}" $
+                (fromList [("x", Function "g" [Var "y"]), ("y", constant "c")]) <> 
+                (fromList [("y", constant "a"), ("z", Var "w")])
+                `shouldBe` fromList [("x", Function "g" [constant "a"]), ("y", constant "c"), ("z", Var "w")]
+
+            it "(P(x,f(x))){x/c} => P(c,f(c))" $
+                substF (singleton "x" $ constant "c")
+                       (Atomic "P" [Var "x", Function "f" [Var "x"]])
+                       `shouldBe` Atomic "P" [constant "c", Function "f" [constant "c"]]
+
+            it "(P(x) & Q(y)){x/c,y/x} => P(c) & Q(x)" $
+                substF (fromList [("x", constant "c"), ("y", Var "x")])
+                       (And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
+                       `shouldBe` And (Atomic "P" [constant "c"]) (Atomic "Q" [Var "x"])
+
+            it "(all x.P(x)){x/c} => all x.P(x)" $
+                substF (singleton "x" $ constant "c")
+                       (All "x" $ Atomic "P" [Var "x"])
+                       `shouldBe` All "x" (Atomic "P" [Var "x"])
+
+            it "(some x.(P(x) & Q(y)){x/c, y/a} => some x.(P(x) & Q(a))" $ 
+                substF (fromList [("x", constant "c"), ("y", constant "a")])
+                       (Some "x" $ And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
+                       `shouldBe` Some "x" (And (Atomic "P" [Var "x"]) (Atomic "Q" [constant "a"]))
+
+            it "(some x.P(y)){y/x} => some x1.P(x)" $
+                substF (singleton "y" $ Var "x")
+                       (Some "x" $ Atomic "P" [Var "y"])
+                       `shouldBe` Some "x1" (Atomic "P" [Var "x"])
+
+            it "(all x.(P(x) & Q(y)){x/f(c), y/f(x)} => all x1.(P(x1) & Q(f(x)))" $
+                substF (fromList [("x", Function "f" [constant "c"]), ("y", Function "f" [Var "x"])])
+                       (All "x" $ And (Atomic "P" [Var "x"]) (Atomic "Q" [Var "y"]))
+                       `shouldBe` All "x1" (And (Atomic "P" [Var "x1"]) (Atomic "Q" [Function "f" [Var "x"]]))
+
+        describe "Unification Tests" $ do
             it "Passes with: x, y => {x/y}" $
                 unifyT (Var "x") 
                        (Var "y") 
-                       `shouldBe` Just (Subst $ M.singleton "x" (Var "y"))
+                       `shouldBe` Just (singleton "x" (Var "y"))
 
             it "Passes: f(x,c), y => {y/f(x,c)}" $
-                unifyT (Function "f" [Var "x", Function "c" []]) 
+                unifyT (Function "f" [Var "x", constant "c"]) 
                        (Var "y") 
-                       `shouldBe` Just (Subst $ M.singleton "y" $ Function "f" [Var "x", Function "c" []])
+                       `shouldBe` Just (singleton "y" $ Function "f" [Var "x", constant "c"])
 
             it "Fails:  f(x,c), x" $
-                unifyT (Function "f" [Var "x", Function "c" []]) 
+                unifyT (Function "f" [Var "x", constant "c"]) 
                        (Var "x") 
                        `shouldBe` Nothing
 
             it "Passes: f(c), f(x) => {x/c}" $
-                unifyT (Function "f" [Function "c" []]) 
+                unifyT (Function "f" [constant "c"]) 
                        (Function "f" [Var "x"]) 
-                       `shouldBe` Just (Subst $ M.singleton "x" $ Function "c" [])
+                       `shouldBe` Just (singleton "x" $ constant "c")
 
             it "Passes: f(a,b), f(a,b) => {}" $
-                unifyT (Function "f" [Function "a" [], Function "b" []]) 
-                       (Function "f" [Function "a" [], Function "b" []]) 
+                unifyT (Function "f" [constant "a", constant "b"]) 
+                       (Function "f" [constant "a", constant "b"]) 
                        `shouldBe` Just mempty
 
             it "Fails:  f(a,b), g(x,y)" $
-                unifyT (Function "f" [Function "a" [], Function "b" []])
+                unifyT (Function "f" [constant "a", constant "b"])
                        (Function "g" [Var "x", Var "y"])
                        `shouldBe` Nothing
 
             it "Fails:  f(x,a,b), f(a,b)" $
-                unifyT (Function "f" [Var "x", Function "a" [], Function "b" []])
-                       (Function "f" [Function "a" [], Function "b" []])
+                unifyT (Function "f" [Var "x", constant "a", constant "b"])
+                       (Function "f" [constant "a", constant "b"])
                        `shouldBe` Nothing
 
             it "Passes: P(x), P(f(c)) => {x/f(c)}" $
                 unifyF (Atomic "P" [Var "x"])
-                       (Atomic "P" [Function "f" [Function "c" []]])
-                       `shouldBe` Just (Subst $ M.singleton "x" $ Function "f" [Function "c" []])
+                       (Atomic "P" [Function "f" [constant "c"]])
+                       `shouldBe` Just (singleton "x" $ Function "f" [constant "c"])
 
             it "Fails:  P(x), P(f(x))" $
                 unifyF (Atomic "P" [Var "x"])
@@ -122,23 +184,23 @@ main = hspec $ do
 
             it "Fails:  P(x), P(a,b)" $
                 unifyF (Atomic "P" [Var "x"])
-                       (Atomic "P" [Function "a" [], Function "b" []])
+                       (Atomic "P" [constant "a", constant "b"])
                        `shouldBe` Nothing
 
             it "Fails:  P(x), Q(a)" $
                 unifyF (Atomic "P" [Var "x"])
-                       (Atomic "Q" [Function "a" []])
+                       (Atomic "Q" [constant "a"])
                        `shouldBe` Nothing
 
             it "Fails:  P(x,f(y),g(z,c)), P(h(z),f(x),g(a,x)" $ 
-                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", Function "c" []]])
-                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [Function "a" [], Var "x"]])
+                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", constant "c"]])
+                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [constant "a", Var "x"]])
                        `shouldBe` Nothing
 
             it "Passes: P(x,f(y),g(z,c)), P(h(z),f(x),g(a,c) => {x/h(a), y/h(a), z/a}" $
-                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", Function "c" []]])
-                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [Function "a" [], Function "c" []]])
-                       `shouldBe` Just (Subst $ M.fromList [("x", Function "h" [Function "a" []]), ("y", Function "h" [Function "a" []]), ("z", Function "a" [])])
+                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", constant "c"]])
+                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [constant "a", constant "c"]])
+                       `shouldBe` Just (fromList [("x", Function "h" [constant "a"]), ("y", Function "h" [constant "a"]), ("z", constant "a")])
 
 randFormula :: Integer -> Formula
 randFormula = fst . runGen (genFormula maxFormDepth) . mkSeed

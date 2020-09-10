@@ -1,5 +1,5 @@
 module FOL
-    ( VarId, PredId, Term(..), Formula(..), freeVarToConst
+    ( VarId, PredId, Term(..), Formula(..), constant, proposition, freeVarToConst
     ) where
 
 import Data.List (intercalate)
@@ -7,7 +7,8 @@ import Data.List (intercalate)
 type VarId  = String
 type PredId = String
 
-data Term = Var VarId | Function VarId [Term]
+data Term = Var VarId 
+          | Function VarId [Term]
     deriving (Eq)
 
 instance Show Term where
@@ -39,6 +40,12 @@ instance Show Formula where
 show' :: Formula -> String
 show' f@(Atomic _ _) = show f
 show' f = "(" ++ show f ++ ")"
+
+constant :: VarId -> Term
+constant id = Function id []
+
+proposition :: PredId -> Formula
+proposition id = Atomic id []
 
 freeVarToConst :: Formula -> Formula
 freeVarToConst = freeVarToConstF []
