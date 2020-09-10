@@ -20,6 +20,7 @@ description:         Please see the README on GitHub at https://github.com/lukep
 
 dependencies:
 - base >= 4.7 && < 5
+- containers
 
 library:
   source-dirs: src
@@ -34,7 +35,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - FOLParser
-    - containers
 
 tests:
   FOLParser-test:

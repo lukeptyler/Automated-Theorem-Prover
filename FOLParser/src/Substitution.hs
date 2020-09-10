@@ -4,7 +4,7 @@ import FOL
 import qualified Data.Map.Strict as M
 
 newtype Subst = Subst (M.Map String Term)
-    deriving (Show)
+    deriving (Eq, Show)
 
 instance Semigroup Subst where
     (Subst m1) <> s2@(Subst m2) = Subst $ ((substT s2) <$> m1) `M.union` (m2 M.\\ m1) 
@@ -38,7 +38,7 @@ disagreeT (Var x) (Var y)
 disagreeT (Var id) t@(Function _ _) = Just (id, t)
 disagreeT t@(Function _ _) (Var id) = Just (id, t)
 disagreeT (Function f ts1) (Function g ts2)
-    | length ts1 /= length ts2 = Nothing
+    | f /= g || length ts1 /= length ts2 = Nothing
     | otherwise = disagreeList ts1 ts2
     where 
         disagreeList :: [Term] -> [Term] -> Maybe (String,Term)
@@ -67,13 +67,7 @@ unifyF (Atomic p1 ts1) (Atomic p2 ts2)
     where
         unifyF' :: Subst -> [Term] -> [Term] -> Maybe Subst
         unifyF' sub [] [] = Just sub
-        unifyF' sub (t1:ts1) (t2:ts2) = do sub' <- unifyT t1 t2
+        unifyF' sub (t1:ts1) (t2:ts2) = do sub' <- unifyT (substT sub t1) (substT sub t2)
                                            unifyF' (sub <> sub') ts1 ts2
-
-
-
-
-
-
 
 

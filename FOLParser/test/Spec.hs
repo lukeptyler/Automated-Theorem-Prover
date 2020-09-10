@@ -1,10 +1,13 @@
 import FOL
 import Generator
 import Parser
+import Substitution
 
 import Test.Hspec
 import Test.QuickCheck
 import Test.Hspec.Core.QuickCheck (modifyMaxSuccess)
+
+import qualified Data.Map.Strict as M
 
 main :: IO ()
 main = hspec $ do
@@ -70,6 +73,72 @@ main = hspec $ do
             modifyMaxSuccess (const 100000) $
                 it "Parsing a random formula should give the same formula" $ 
                 property testParse
+
+        describe "Substitution Tests" $ do
+            it "Passes with: x, y => {x/y}" $
+                unifyT (Var "x") 
+                       (Var "y") 
+                       `shouldBe` Just (Subst $ M.singleton "x" (Var "y"))
+
+            it "Passes: f(x,c), y => {y/f(x,c)}" $
+                unifyT (Function "f" [Var "x", Function "c" []]) 
+                       (Var "y") 
+                       `shouldBe` Just (Subst $ M.singleton "y" $ Function "f" [Var "x", Function "c" []])
+
+            it "Fails:  f(x,c), x" $
+                unifyT (Function "f" [Var "x", Function "c" []]) 
+                       (Var "x") 
+                       `shouldBe` Nothing
+
+            it "Passes: f(c), f(x) => {x/c}" $
+                unifyT (Function "f" [Function "c" []]) 
+                       (Function "f" [Var "x"]) 
+                       `shouldBe` Just (Subst $ M.singleton "x" $ Function "c" [])
+
+            it "Passes: f(a,b), f(a,b) => {}" $
+                unifyT (Function "f" [Function "a" [], Function "b" []]) 
+                       (Function "f" [Function "a" [], Function "b" []]) 
+                       `shouldBe` Just mempty
+
+            it "Fails:  f(a,b), g(x,y)" $
+                unifyT (Function "f" [Function "a" [], Function "b" []])
+                       (Function "g" [Var "x", Var "y"])
+                       `shouldBe` Nothing
+
+            it "Fails:  f(x,a,b), f(a,b)" $
+                unifyT (Function "f" [Var "x", Function "a" [], Function "b" []])
+                       (Function "f" [Function "a" [], Function "b" []])
+                       `shouldBe` Nothing
+
+            it "Passes: P(x), P(f(c)) => {x/f(c)}" $
+                unifyF (Atomic "P" [Var "x"])
+                       (Atomic "P" [Function "f" [Function "c" []]])
+                       `shouldBe` Just (Subst $ M.singleton "x" $ Function "f" [Function "c" []])
+
+            it "Fails:  P(x), P(f(x))" $
+                unifyF (Atomic "P" [Var "x"])
+                       (Atomic "P" [Function "f" [Var "x"]])
+                       `shouldBe` Nothing
+
+            it "Fails:  P(x), P(a,b)" $
+                unifyF (Atomic "P" [Var "x"])
+                       (Atomic "P" [Function "a" [], Function "b" []])
+                       `shouldBe` Nothing
+
+            it "Fails:  P(x), Q(a)" $
+                unifyF (Atomic "P" [Var "x"])
+                       (Atomic "Q" [Function "a" []])
+                       `shouldBe` Nothing
+
+            it "Fails:  P(x,f(y),g(z,c)), P(h(z),f(x),g(a,x)" $ 
+                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", Function "c" []]])
+                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [Function "a" [], Var "x"]])
+                       `shouldBe` Nothing
+
+            it "Passes: P(x,f(y),g(z,c)), P(h(z),f(x),g(a,c) => {x/h(a), y/h(a), z/a}" $
+                unifyF (Atomic "P" [Var "x", Function "f" [Var "y"], Function "g" [Var "z", Function "c" []]])
+                       (Atomic "P" [Function "h" [Var "z"], Function "f" [Var "x"], Function "g" [Function "a" [], Function "c" []]])
+                       `shouldBe` Just (Subst $ M.fromList [("x", Function "h" [Function "a" []]), ("y", Function "h" [Function "a" []]), ("z", Function "a" [])])
 
 randFormula :: Integer -> Formula
 randFormula = fst . runGen (genFormula maxFormDepth) . mkSeed
