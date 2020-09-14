@@ -3,7 +3,7 @@ module Main where
 import FOL
 import Generator
 import Parser
-import Substitution
+import Unification
 
 import qualified Data.Map.Strict as M
 import Data.Either

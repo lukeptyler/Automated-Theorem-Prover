@@ -1,10 +1,7 @@
-module FOL
-    ( VarId, PredId, Term(..), BinaryOp(..), Quantifier(..), Formula(..),
-      (.&), (.|), (.->), (.<->), neg, univ, exist,
-      constant, proposition, freeVarToConst
-    ) where
+module FOL where
 
-import Data.List (intercalate)
+import qualified Data.Map.Strict as M
+import Data.List (nub, delete, intercalate, intersect)
 
 type VarId  = String
 type PredId = String
@@ -39,13 +36,15 @@ data Formula = Atomic PredId [Term]
 instance Show Formula where
     show (Atomic p [])   = p
     show (Atomic p ts)   = p ++ "(" ++ intercalate "," (map show ts) ++ ")"
-    show (Neg f)         = "-" ++ show' f ++ ""
-    show (Binary op l r) = show' l ++ show op ++ show' r
+    show (Neg f)         = "-" ++ show_ f ++ ""
+    show (Binary op l r) = show_ l ++ show op ++ show_ r
     show (Quant  q id f) = show q ++ id ++ ".(" ++ show f ++ ")"
 
-show' :: Formula -> String
-show' f@(Atomic _ _) = show f
-show' f = "(" ++ show f ++ ")"
+show_ :: Formula -> String
+show_ f@(Atomic _ _) = show f
+show_ f = "(" ++ show f ++ ")"
+
+-- Formula Constructors --
 
 constant :: VarId -> Term
 constant id = Function id []
@@ -78,6 +77,76 @@ univ id f = Quant All id f
 exist :: VarId -> Formula -> Formula
 exist id f = Quant Some id f
 
+-- Substitutions --
+
+newtype Subst = Subst (M.Map String Term)
+    deriving (Eq)
+
+instance Show Subst where
+    show (Subst m) = '{' : intercalate ", " (map (\(v,t) -> v ++ "/" ++ show t) $ M.assocs m) ++ "}"
+
+instance Semigroup Subst where
+    (Subst m1) <> s2@(Subst m2) = Subst $ ((substT s2) <$> m1) `M.union` (m2 M.\\ m1) 
+
+instance Monoid Subst where
+    mempty = Subst $ M.empty
+
+singleton :: VarId -> Term -> Subst
+singleton id t = Subst $ M.singleton id t
+
+fromList :: [(VarId,Term)] -> Subst
+fromList ls = Subst $ M.fromList ls
+
+restrict :: String -> Subst -> Subst
+restrict id (Subst map) = Subst $ M.delete id map
+
+support :: Subst -> [VarId]
+support (Subst map) = M.keys map
+
+varRange :: Subst -> [VarId]
+varRange (Subst map) = concatMap varsInTerm $ M.elems map
+
+varsInTerm :: Term -> [VarId]
+varsInTerm (Var id) = [id]
+varsInTerm (Function _ ts) = nub $ concatMap varsInTerm ts
+
+varsInForm :: Formula -> [VarId]
+varsInForm (Atomic pred ts) = nub $ concatMap varsInTerm ts
+varsInForm (Neg        f) = varsInForm f
+varsInForm (Binary _ l r) = nub $ varsInForm l ++ varsInForm r
+varsInForm (Quant _ id f) = delete id $ varsInForm f
+
+renameQuant :: VarId -> Formula -> Formula
+renameQuant rename (Quant op id f) = Quant op rename $ substF (singleton id (Var rename)) f
+
+substF :: Subst -> Formula -> Formula
+substF sub (Atomic pred ts) = Atomic pred $ map (substT sub) ts
+substF sub (Neg         f)  = Neg $ (substF sub) f
+substF sub (Binary op l r)  = Binary op (substF sub l) (substF sub r)
+substF sub qu@(Quant q id f)
+    | id `elem` varRange sub && not (null $ intersect (varsInForm f) (support sub)) = substF sub $ renameQuant (nextId id) qu
+    | otherwise = Quant q id $ substF (restrict id sub) f
+
+substT :: Subst -> Term -> Term
+substT sub (Function id ts) = Function id $ map (substT sub) ts
+substT (Subst map) (Var id)
+    | id `M.member` map = map M.! id
+    | otherwise = Var id 
+
+-- Rewrite Utilities --
+
+nextId :: VarId -> VarId
+nextId (l:n)
+    | null n = l : "1"
+    | otherwise = l : (show $ succ $ (read n :: Int))
+
+-- Precond:  Any FOL formula
+-- Postcond: The formula written in prenex form and skolemized
+normalize :: Formula -> Formula
+normalize = skolemize . prenex . nameApart . freeVarToConst
+
+-- Precond:  Any FOL formula
+-- Postcond: The formula with all free variables to constants
 freeVarToConst :: Formula -> Formula
 freeVarToConst = freeVarToConstF []
     where
@@ -92,3 +161,18 @@ freeVarToConst = freeVarToConstF []
             | id `notElem` bound = Function id []
             | otherwise          = v
         freeVarToConstT bound (Function f ts) = Function f $ map (freeVarToConstT bound) ts
+
+-- Precond:  Any FOL formula
+-- Postcond: The formula with all free and bound variables unique (named apart)
+nameApart :: Formula -> Formula
+nameApart = undefined
+
+-- Precond:  An FOL formula that is named apart
+-- Postcond: The formula written in prenex form
+prenex :: Formula -> Formula
+prenex = undefined
+
+-- Precond:  An FOL formula that is in prenex form
+-- Postcond: The formula that has been skolemized
+skolemize :: Formula -> Formula
+skolemize = undefined

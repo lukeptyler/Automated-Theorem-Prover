@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3f2b6e5c61cdf63398bf54580afd5b4d54c9d445c175096f9c786b470d258475
+-- hash: 93c279c9da8977eceeef4c931b3c154c8fa6385f131f613b48063a1a463f7bfe
 
 name:           FOLParser
 version:        0.1.0.0
@@ -30,7 +30,7 @@ library
       FOL
       Generator
       Parser
-      Substitution
+      Unification
   other-modules:
       Paths_FOLParser
   hs-source-dirs:

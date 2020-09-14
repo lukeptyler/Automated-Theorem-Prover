@@ -1,7 +1,7 @@
 import FOL
 import Generator
 import Parser
-import Substitution
+import Unification
 
 import Test.Hspec
 import Test.QuickCheck
