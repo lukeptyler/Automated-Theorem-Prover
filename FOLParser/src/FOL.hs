@@ -55,19 +55,19 @@ constant id = Function id []
 proposition :: PredId -> Formula
 proposition id = Atomic id []
 
-infixl 4 .&
+infixl 5 .&
 (.&) :: Formula -> Formula -> Formula
 l .& r = Binary And l r
 
-infixl 3 .|
+infixl 4 .|
 (.|) :: Formula -> Formula -> Formula
 l .| r = Binary Or l r
 
-infixl 2 .->
+infixl 3 .->
 (.->) :: Formula -> Formula -> Formula
 l .-> r = Binary Imp l r
 
-infixl 1 .<->
+infixl 2 .<->
 (.<->) :: Formula -> Formula -> Formula
 l .<-> r = Binary Bicond l r
 
@@ -144,9 +144,9 @@ renameQuant :: VarId -> Formula -> Formula
 renameQuant rename (Quant op id f) = Quant op rename $ substF (singleton id (Var rename)) f
 
 -- Precond:  Any FOL formula
--- Postcond: The formula written in prenex form and skolemized
+-- Postcond: The formula with free variables as constants and skolemized
 normalize :: Formula -> Formula
-normalize = skolemize . prenex . nameApart . splitBiconds . freeVarToConst
+normalize = skolemize . nameApart . splitBiconds . freeVarToConst
 
 -- Precond:  Any FOL formula
 -- Postcond: The formula with all free variables to constants
@@ -190,18 +190,16 @@ nameApart = snd . nameApart' []
     where
         nameApart' :: [VarId] -> Formula -> ([VarId], Formula)
         nameApart' bound (Atomic pred ts) = (bound, Atomic pred ts)
-        nameApart' bound (Neg         f) = do f' <- nameApart' bound f
-                                              return $ Neg f'
-        nameApart' bound (Binary op l r) = let (bound', l') = nameApart' bound l 
-                                           in (do r' <- nameApart' bound' r
-                                                  return $ Binary op l' r'
-                                              )
+        nameApart' bound (Neg         f) = Neg <$> nameApart' bound f
+        nameApart' bound (Binary op l r) = uncurry (Binary op) <$> (bound'', (l', r'))
+            where
+                (bound',  l') = nameApart' bound  l
+                (bound'', r') = nameApart' bound' r
         nameApart' bound qu@(Quant  q id f)
             | id `elem` bound = nameApart' bound $ renameQuant (nextId id) qu
-            | otherwise = do f' <- nameApart' (id:bound) f
-                             return $ Quant q id f'
+            | otherwise = Quant q id <$> nameApart' (id:bound) f
 
--- Precond:  An FOL formula that is named apart with biconditional split if containing quantifiers
+-- Precond:  An FOL formula that is named apart with biconditionals split if containing quantifiers
 -- Postcond: The formula written in prenex form
 prenex :: Formula -> Formula
 prenex f@(Atomic _ _) = f
@@ -235,15 +233,26 @@ switchQuantifier :: Quantifier -> Quantifier
 switchQuantifier All  = Some
 switchQuantifier Some = All
 
--- Precond:  An FOL formula that is in prenex form
+-- Precond:  An FOL formula that is named apart with biconditionals split if containing quantifiers
 -- Postcond: The formula that has been skolemized
 skolemize :: Formula -> Formula
-skolemize = skolemize' 1 []
+skolemize = snd . sk [] True . (,) 1
     where
-        skolemize' :: Int -> [VarId] -> Formula -> Formula
-        skolemize' nextId boundVars (Quant All  id f) = Quant All id $ skolemize' nextId (boundVars ++ [id]) f
-        skolemize' nextId boundVars (Quant Some id f) = skolemize' (nextId+1) boundVars $ substF (singleton id $ Function ("sko"++show nextId) $ map Var boundVars) f
-        skolemize' _ _ f = f
+        sk :: [VarId] -> Bool -> (Int, Formula) -> (Int, Formula)
+        sk _ _ x@(n, Atomic _ _) = x
+        sk bound pos (n, Neg f) = Neg <$> sk bound (not pos) (n, f)
+        sk bound pos x@(n, Binary Bicond _ _) = x
+        sk bound pos (n, Binary Imp l r) = uncurry (Binary Imp) <$> (n'', (l', r'))
+            where
+                (n', l') = sk bound (not pos) (n,  l)
+                (n'',r') = sk bound pos       (n', r)
+        sk bound pos (n, Binary op  l r) = uncurry (Binary op) <$> (n'', (l', r'))
+            where
+                (n', l') = sk bound pos (n,  l)
+                (n'',r') = sk bound pos (n', r)
+        sk bound True  (n, Quant All  id f) = Quant All  id <$> sk (bound ++ [id]) True  (n, f)
+        sk bound False (n, Quant Some id f) = Quant Some id <$> sk (bound ++ [id]) False (n, f)
+        sk bound pos   (n, Quant q    id f) = sk bound pos $ substF (singleton id $ Function ("sko"++show n) $ map Var bound) <$> (n+1, f)
 
 
 
