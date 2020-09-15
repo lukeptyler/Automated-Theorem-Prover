@@ -98,72 +98,72 @@ main = hspec $ do
 
             describe "Name Apart" $ do
                 it "P => P" $ 
-                    nameApart (proposition "P")
+                    na (proposition "P")
                     `shouldBe` proposition "P"
 
                 it "P(x) => P(x)" $
-                    nameApart (Atomic "P" [Var "x"])
+                    na (Atomic "P" [Var "x"])
                     `shouldBe` Atomic "P" [Var "x"]
 
                 it "all x.P(x) => all x.P(x)" $
-                    nameApart (univ "x" $ Atomic "P" [Var "x"])
+                    na (univ "x" $ Atomic "P" [Var "x"])
                     `shouldBe` univ "x" (Atomic "P" [Var "x"])
 
                 it "some x.P(x) & all x.Q(x) => some x.P(x) & all x1.Q(x1)" $
-                    nameApart (exist "x" (Atomic "P" [Var "x"]) .& univ "x" (Atomic "Q" [Var "x"]))
+                    na (exist "x" (Atomic "P" [Var "x"]) .& univ "x" (Atomic "Q" [Var "x"]))
                     `shouldBe` exist "x" (Atomic "P" [Var "x"]) .& univ "x1" (Atomic "Q" [Var "x1"])
 
                 it "all x.some y.(P(x,y) & some x.Q(x,y)) => all x.some y.(P(x,y) & some x1.Q(x1,y))" $
-                    nameApart (univ "x" $ exist "y" (Atomic "P" [Var "x", Var "y"] .& exist "x" (Atomic "Q" [Var "x", Var "y"])))
+                    na (univ "x" $ exist "y" (Atomic "P" [Var "x", Var "y"] .& exist "x" (Atomic "Q" [Var "x", Var "y"])))
                     `shouldBe` univ "x" (exist "y" (Atomic "P" [Var "x", Var "y"] .& exist "x1" (Atomic "Q" [Var "x1", Var "y"])))
 
                 it "all x.some x.some y.all x.P(x,y,x) => all x.some x1.some y.all x2.P(x2,y,x2)" $
-                    nameApart (univ "x" $ exist "x" $ exist "y" $ univ "x" $ Atomic "P" [Var "x", Var "y", Var "x"])
+                    na (univ "x" $ exist "x" $ exist "y" $ univ "x" $ Atomic "P" [Var "x", Var "y", Var "x"])
                     `shouldBe` univ "x" (exist "x1" $ exist "y" $ univ "x2" $ Atomic "P" [Var "x2", Var "y", Var "x2"])
 
             describe "Skolemize" $ do
                 it "P => P" $
-                    skolemize (proposition "P")
+                    sk (proposition "P")
                     `shouldBe` proposition "P"
 
                 it "all x.P(x) => all x.P(x)" $
-                    skolemize (univ "x" $ Atomic "P" [Var "x"])
+                    sk (univ "x" $ Atomic "P" [Var "x"])
                     `shouldBe` univ "x" (Atomic "P" [Var "x"])
 
                 it "some x.P(x) => P(sko1)" $
-                    skolemize (exist "x" $ Atomic "P" [Var "x"])
+                    sk (exist "x" $ Atomic "P" [Var "x"])
                     `shouldBe` Atomic "P" [constant "sko1"]
 
                 it "-all x.P(x) => -P(sko1)" $
-                    skolemize (neg $ univ "x" $ Atomic "P" [Var "x"])
+                    sk (neg $ univ "x" $ Atomic "P" [Var "x"])
                     `shouldBe` neg (Atomic "P" [constant "sko1"])
 
                 it "all x.some y.P(y) | all z.some w.Q(w) => all x.P(sko1(x)) | all z.Q(sko2(z))" $
-                    skolemize (univ "x" (exist "y" $ Atomic "P" [Var "y"]) .| univ "z" (exist "w" $ Atomic "Q" [Var "w"]))
+                    sk (univ "x" (exist "y" $ Atomic "P" [Var "y"]) .| univ "z" (exist "w" $ Atomic "Q" [Var "w"]))
                     `shouldBe` univ "x" (Atomic "P" [Function "sko1" [Var "x"]]) .| univ "z" (Atomic "Q" [Function "sko2" [Var "z"]])
 
                 it "all x.(some y.P(y) & Q(x)) => all x.(P(sko1(x)) & Q(x))" $
-                    skolemize (univ "x" $ exist "y" (Atomic "P" [Var "y"]) .& Atomic "Q" [Var "x"])
+                    sk (univ "x" $ exist "y" (Atomic "P" [Var "y"]) .& Atomic "Q" [Var "x"])
                     `shouldBe` univ "x" (Atomic "P" [Function "sko1" [Var "x"]] .& Atomic "Q" [Var "x"])
 
                 it "some x.all y.P(x,y) -> Q => some x.P(x, sko1(x)) -> Q" $
-                    skolemize (exist "x" (univ "y" $ Atomic "P" [Var "x", Var "y"]) .-> proposition "Q")
+                    sk (exist "x" (univ "y" $ Atomic "P" [Var "x", Var "y"]) .-> proposition "Q")
                     `shouldBe` exist "x" (Atomic "P" [Var "x", Function "sko1" [Var "x"]]) .-> proposition "Q"
 
                 it "P -> all y.some x.Q(x,y) => P -> all y.Q(sko1(y), y)" $
-                    skolemize (proposition "P" .-> univ "y" (exist "x" $ Atomic "Q" [Var "x", Var "y"]))
+                    sk (proposition "P" .-> univ "y" (exist "x" $ Atomic "Q" [Var "x", Var "y"]))
                     `shouldBe` proposition "P" .-> univ "y" (Atomic "Q" [Function "sko1" [Var "y"], Var "y"])
 
                 it "-some x.(P(x) -> all y.Q(y)) => -some x.(P(x) -> Q(sko1(x)))" $
-                    skolemize (neg $ exist "x" $ Atomic "P" [Var "x"] .-> univ "y" (Atomic "Q" [Var "y"]))
+                    sk (neg $ exist "x" $ Atomic "P" [Var "x"] .-> univ "y" (Atomic "Q" [Var "y"]))
                     `shouldBe` neg (exist "x" $ Atomic "P" [Var "x"] .-> Atomic "Q" [Function "sko1" [Var "x"]])
 
                 it "all x.some y.all z.some w.P(x,y,z,w) => all x.all z.P(x,sko1(x),z,sko2(x,z))" $
-                    skolemize (univ "x" $ exist "y" $ univ "z" $ exist "w" $ Atomic "P" [Var "x", Var "y", Var "z", Var "w"])
+                    sk (univ "x" $ exist "y" $ univ "z" $ exist "w" $ Atomic "P" [Var "x", Var "y", Var "z", Var "w"])
                     `shouldBe` univ "x" (univ "z" $ Atomic "P" [Var "x", Function "sko1" [Var "x"], Var "z", Function "sko2" [Var "x", Var "z"]])
 
                 it "-some x.some y.(P(x,y) -> all z.all w.Q(z,w)) => -some x.some y.(P(x,y) -> Q(sko1(x,y), sko2(x,y)))" $
-                    skolemize (neg $ exist "x" $ exist "y" $ Atomic "P" [Var "x", Var "y"] .-> univ "z" (univ "w" $ Atomic "Q" [Var "z", Var "w"]))
+                    sk (neg $ exist "x" $ exist "y" $ Atomic "P" [Var "x", Var "y"] .-> univ "z" (univ "w" $ Atomic "Q" [Var "z", Var "w"]))
                     `shouldBe` neg (exist "x" $ exist "y" $ Atomic "P" [Var "x", Var "y"] .-> Atomic "Q" [Function "sko1" [Var "x", Var "y"], Function "sko2" [Var "x", Var "y"]])
 
             describe "Normalize" $ do
@@ -307,3 +307,9 @@ testParse :: Integer -> Bool
 testParse s = either (const False) (== freeVarToConst randForm) $ parseFormula $ show randForm
     where
         randForm = fst $ runGen (genFormula maxFormDepth) $ mkSeed s
+
+sk :: Formula -> Formula
+sk = snd . skolemize [] True 1
+
+na :: Formula -> Formula
+na = snd . nameApart []
