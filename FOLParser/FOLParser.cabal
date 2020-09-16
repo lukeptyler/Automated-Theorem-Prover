@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c18472492261e5a8d2a319fdccd74ba4a235d46120751c7230ea5ba87911d3f2
+-- hash: e522814e578e7d506dc39a258e698d3d7657e45f2dc5d3d2ce6ceafbd5bbf218
 
 name:           FOLParser
 version:        0.1.0.0
@@ -33,6 +33,7 @@ library
       FOL.Types
       Generator
       Parser
+      Tableau
       Unification
   other-modules:
       Paths_FOLParser

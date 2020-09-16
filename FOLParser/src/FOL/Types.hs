@@ -78,3 +78,38 @@ univ id f = Quant All id f
 
 exist :: VarId -> Formula -> Formula
 exist id f = Quant Some id f
+
+-- Formula Classifications --
+
+isAtomic :: Formula -> Bool
+isAtomic (Atomic _ _)       = True
+isAtomic (Neg (Atomic _ _)) = True
+isAtomic _                  = False
+
+isDoubleNeg :: Formula -> Bool
+isDoubleNeg (Neg (Neg _)) = True
+isDoubleNeg _             = False
+
+isAlpha :: Formula -> Bool
+isAlpha (Binary And _ _)       = True
+isAlpha (Neg (Binary Or  _ _)) = True
+isAlpha (Neg (Binary Imp _ _)) = True
+isAlpha _                      = False
+
+isBeta :: Formula -> Bool
+isBeta (Neg (Binary And _ _))    = True
+isBeta (Binary Or  _ _)          = True
+isBeta (Binary Imp _ _)          = True
+isBeta (Binary Bicond _ _)       = True
+isBeta (Neg (Binary Bicond _ _)) = True
+isBeta _                         = False
+
+isDelta :: Formula -> Bool
+isDelta (Quant Some _ _)      = True
+isDelta (Neg (Quant All _ _)) = True
+isDelta _                     = False
+
+isGamma :: Formula -> Bool
+isGamma (Quant All _ _)        = True
+isGamma (Neg (Quant Some _ _)) = True
+isGamma _                      = False
