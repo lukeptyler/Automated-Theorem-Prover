@@ -2,7 +2,7 @@ module Generator
     ( Gen(..), genFormula, maxFormDepth, mkSeed, genFromList
     ) where
 
-import FOL
+import FOL.Base
 import Data.Char (intToDigit, chr, ord)
 import Control.Monad (replicateM)
 import Control.Applicative (liftA3)

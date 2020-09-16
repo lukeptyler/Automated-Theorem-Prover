@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 93c279c9da8977eceeef4c931b3c154c8fa6385f131f613b48063a1a463f7bfe
+-- hash: c18472492261e5a8d2a319fdccd74ba4a235d46120751c7230ea5ba87911d3f2
 
 name:           FOLParser
 version:        0.1.0.0
@@ -27,7 +27,10 @@ source-repository head
 
 library
   exposed-modules:
-      FOL
+      FOL.Base
+      FOL.Rewrite
+      FOL.Substitution
+      FOL.Types
       Generator
       Parser
       Unification

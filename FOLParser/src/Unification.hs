@@ -1,6 +1,6 @@
 module Unification where
 
-import FOL
+import FOL.Base
 
 disagreeT :: Term -> Term -> Maybe (String,Term)
 disagreeT (Var x) (Var y)

@@ -2,7 +2,7 @@ module Parser
     ( parseFormula, parseError
     ) where
 
-import FOL
+import FOL.Base
 import Data.Char (isLower, isUpper, isDigit, isSpace)
 import Data.List (isPrefixOf, isInfixOf, uncons)
 import Data.Either (isLeft)
@@ -222,7 +222,7 @@ parse p@(Parser tokens _ _)
                      parse p'
 
 processToken :: Token -> ParseStep
-processToken (AtomicToken atom) p = if (not. null . tokenList) p && (head . tokenList) p == OpenToken
+processToken (AtomicToken atom) p = if (not . null . tokenList) p && (head . tokenList) p == OpenToken
                                     then Left "Invalid formula"
                                     else maybe (Left $ "Invalid atomic formula " ++ atom)
                                                (\(form, _) -> pushFormula form p) $

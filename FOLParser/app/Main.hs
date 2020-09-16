@@ -1,6 +1,6 @@
 module Main where
 
-import FOL
+import FOL.Base
 import Generator
 import Parser
 import Unification
