@@ -118,9 +118,15 @@ extractAtomic :: Formula -> Formula
 extractAtomic f@(Atomic _ _)       = f
 extractAtomic (Neg f@(Atomic _ _)) = f
 
-extractBinary :: Formula -> (Formula, Formula)
-extractBinary (Binary      _ l r)  = (l, r)
-extractBinary (Neg (Binary _ l r)) = (l, r)
+extractAlpha :: Formula -> (Formula, Formula)
+extractAlpha (Binary And      l r)  = (l, r)
+extractAlpha (Neg (Binary Or  l r)) = (Neg l, Neg r)
+extractAlpha (Neg (Binary Imp l r)) = (l, Neg r)
+
+extractBeta :: Formula -> (Formula, Formula)
+extractBeta (Neg (Binary And l r)) = (Neg l, Neg r)
+extractBeta (Binary Or       l r)  = (l, r)
+extractBeta (Binary Imp      l r)  = (Neg l, r)
 
 extractQuant :: Formula -> (VarId, Formula)
 extractQuant (Quant      _ id f)  = (id, f)

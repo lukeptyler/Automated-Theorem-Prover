@@ -1,11 +1,15 @@
 module Tableau where
 
 import FOL.Base
+import Unification (unifyF)
+
+import Data.List (nub, partition)
+import Data.Maybe (mapMaybe)
 
 -- Queue and Priority Queue --
 
 data Queue a = Queue [a]
-    deriving (Show)
+    deriving (Eq, Show)
 
 initQueue :: [a] -> Queue a
 initQueue ls = Queue ls
@@ -14,16 +18,21 @@ isEmptyQueue :: Queue a -> Bool
 isEmptyQueue (Queue []) = True
 isEmptyQueue _          = False
 
-pushQueue :: a -> Queue a -> Queue a
-pushQueue a (Queue ls) = Queue $ ls ++ [a]
+pushQueue :: (Eq a) => a -> Queue a -> Queue a
+pushQueue a (Queue ls) = Queue $ nub $ ls ++ [a]
+
+pushQueueList :: (Eq a) => [a] -> Queue a -> Queue a
+pushQueueList list (Queue ls) = Queue $ ls ++ list
 
 popQueue :: Queue a -> Maybe (a, Queue a)
 popQueue (Queue [])     = Nothing
 popQueue (Queue (a:ls)) = Just (a, Queue ls)
 
 data PriorityQueue a = PriorityQueue {classifiers :: [a -> Bool], queues :: [Queue a]}
+instance Eq a => Eq (PriorityQueue a) where
+    p1 == p2 = queues p1 == queues p2
 instance Show a => Show (PriorityQueue a) where
-    show (PriorityQueue _ queues) = show queues
+    show (PriorityQueue _ queues) = "PriorityQueue " ++ show (concatMap (\(Queue ls) -> ls) queues)
 
 initPriority :: [a -> Bool] -> PriorityQueue a
 initPriority classifiers = PriorityQueue classifiers $ replicate (length classifiers + 1) $ Queue []
@@ -31,7 +40,7 @@ initPriority classifiers = PriorityQueue classifiers $ replicate (length classif
 isEmptyPriority :: PriorityQueue a -> Bool
 isEmptyPriority priority = all isEmptyQueue $ queues priority
 
-pushPriority :: a -> PriorityQueue a -> PriorityQueue a
+pushPriority :: (Eq a) => a -> PriorityQueue a -> PriorityQueue a
 pushPriority a priority = priority {queues = front ++ [pushQueue a $ head back] ++ tail back}
     where
         index = length $ takeWhile (\f -> not $ f a) $ classifiers priority
@@ -51,21 +60,27 @@ popPriority priority = do (a, queues') <- popList $ queues priority
 -- Tableau --
 
 data Branch = Branch {nextPar :: Int, posAtom :: [Formula], negAtom :: [Formula], forms :: PriorityQueue Formula}
-    deriving (Show)
+    deriving (Eq)
+instance Show Branch where
+    show branch = "Branch (" ++ show (nextPar branch) ++ ", " ++ show (posAtom branch) ++ ", " ++ show (negAtom branch) ++ ", " ++ show (forms branch) ++ ")"
 
 initBranch :: [Formula] -> Branch
 initBranch forms = addToBranchList forms $ Branch 1 [] [] $ initPriority [isDoubleNeg, isAlpha, isBeta, isDelta, isGamma]
 
 isBranchClosed :: Branch -> Bool
-isBranchClosed branch = undefined
+isBranchClosed branch = not $ null $ mapMaybe (uncurry unifyF) $ pairAtomics (posAtom branch) (negAtom branch)
+    where
+        pairAtomics :: [Formula] -> [Formula] -> [(Formula, Formula)]
+        pairAtomics [] _ = []
+        pairAtomics (f@(Atomic p1 _):fs1) fs2 = (map ((,) f) $ filter (\(Atomic p2 _) -> p1 == p2) fs2) ++ pairAtomics fs1 fs2
 
 -- Precond:  Branch that has already been checked for closure and failed
 isBranchOpen :: Branch -> Bool
 isBranchOpen branch = isEmptyPriority (forms branch)
 
 addToBranch :: Formula -> Branch -> Branch
-addToBranch f@(Atomic _ _)       branch = branch {posAtom = f:posAtom branch}
-addToBranch (Neg f@(Atomic _ _)) branch = branch {negAtom = f:negAtom branch}
+addToBranch f@(Atomic _ _)       branch = branch {posAtom = nub $ f:posAtom branch}
+addToBranch (Neg f@(Atomic _ _)) branch = branch {negAtom = nub $ f:negAtom branch}
 addToBranch f                    branch = branch {forms = pushPriority f $ forms branch}
 
 addToBranchList :: [Formula] -> Branch -> Branch
@@ -84,29 +99,34 @@ expandDoubleNeg (Neg (Neg f)) = (,) (isAtomic f) . addToBranch f
 expandAlpha :: Formula -> Branch -> (Bool, Branch)
 expandAlpha f = (,) (any isAtomic [l, r]) . addToBranchList [l, r]
     where
-        (l, r) = extractBinary f
+        (l, r) = extractAlpha f
 
 expandBeta :: Formula -> Branch -> (Bool, [Branch])
 expandBeta (Binary Bicond      l r)  = (,) (any isAtomic [l, r]) . splitBranch [[l, r], [neg l, neg r]]
 expandBeta (Neg (Binary Bicond l r)) = (,) (any isAtomic [l, r]) . splitBranch [[l, neg r], [neg l, r]]
 expandBeta f = (,) (any isAtomic [l, r]) . splitBranch [[l], [r]]
     where
-        (l, r) = extractBinary f
+        (l, r) = extractBeta f
 
 expandGamma :: Formula -> Branch -> (Bool, Branch)
-expandGamma f branch = (,) (isAtomic f) . addToBranchList [substF sub f', f] $ branch {nextPar = nextPar branch + 1}
+expandGamma f branch = (,) (isAtomic f') . addToBranchList [substF sub f', f] $ branch {nextPar = nextPar branch + 1}
     where
         (id, f') = extractQuant f
         sub = singleton id $ Var $ "par" ++ show (nextPar branch)
 
---Step Branch :: Formula -> (Bool, Branch)
---  switch on type of formula
+stepBranch :: Formula -> Branch -> (Bool, [Branch])
+stepBranch f
+    | isDoubleNeg f = ((\x -> [x]) <$>) . expandDoubleNeg f
+    | isAlpha f     = ((\x -> [x]) <$>) . expandAlpha f
+    | isBeta f      = expandBeta f
+    | isGamma f     = ((\x -> [x]) <$>) . expandGamma f
 
 data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch}
     deriving (Show)
 
+type Report = String
+
 -- Precond: A list of FOL formulas that have been normalized
--- branch for closure and sort
 initTableau :: [Formula] -> Tableau
 initTableau forms
     | isBranchClosed branch = blankTableau {closed = [branch]}
@@ -117,20 +137,10 @@ initTableau forms
         branch = initBranch forms
 
 isTableauClosed :: Tableau -> Bool
-isTableauClosed tableau = isEmptyQueue (unfinished tableau) && null (open tableau)
+isTableauClosed tableau = not (isTableauOpen tableau) && isEmptyQueue (unfinished tableau)
 
 isTableauOpen :: Tableau -> Bool
-isTableauOpen tableau = isEmptyQueue (unfinished tableau) && null (closed tableau)
-
---Prove [Formula] -> Formula -> Report
---      premises -> conclusion -> result
---  initTableau with premises and neg conclusion
---  if tableau is closed or open, report
-
---Run Tableau with initial tableau
---  step tableau
---  if tableau is closed, open, or out out steps, report
---  otherwise, step
+isTableauOpen tableau = not $ null $ open tableau
 
 --Tableau Step
 --  pop off next branch
@@ -139,3 +149,53 @@ isTableauOpen tableau = isEmptyQueue (unfinished tableau) && null (closed tablea
 --  step branch -> (added atomic, branch')
 --  if added atomic -> if closed then add to closed, if open then add to open
 --  otherwise, add to queue
+stepTableau :: Tableau -> Maybe Tableau
+stepTableau tableau = do (branch, queue) <- popQueue $ unfinished tableau
+                         (f, branch') <- nextOnBranch branch
+                         let newMaxSteps = maxSteps tableau - (if isGamma f then 1 else 0)
+                         let (addedAtomic, branches) = stepBranch f branch'
+                         return (if addedAtomic
+                                 then let (closedBranches, branches')  = partition isBranchClosed branches in
+                                      let (openBranches,   branches'') = partition isBranchOpen branches' in
+                                          tableau {maxSteps = newMaxSteps, 
+                                                   open = open tableau ++ openBranches, 
+                                                   closed = closed tableau ++ closedBranches, 
+                                                   unfinished = pushQueueList branches'' queue
+                                                  }
+                                 else tableau {maxSteps = newMaxSteps,
+                                               unfinished = pushQueueList branches queue
+                                              }
+                                )
+
+--Run Tableau with initial tableau
+--  step tableau
+--  if tableau is closed, open, or out out steps, report
+--  otherwise, step
+runTableau :: Tableau -> Maybe Report
+runTableau tableau = do tableau' <- stepTableau tableau
+                        case () of _ | isTableauOpen tableau'   -> return $ counterExample tableau'
+                                     | isTableauClosed tableau' -> return $ closedTableau tableau'
+                                     | maxSteps tableau' == 0   -> return $ outOfSteps tableau'
+                                     | otherwise                -> runTableau tableau'
+
+counterExample :: Tableau -> Report
+counterExample tableau = show $ posAtom openBranch ++ (map neg $ negAtom openBranch)
+    where
+        openBranch = head $ open tableau
+
+closedTableau :: Tableau -> Report
+closedTableau _ = "Valid"
+
+outOfSteps :: Tableau -> Report
+outOfSteps _ = "Ran out of steps. May be valid, but probably invalid"
+
+--Prove [Formula] -> Formula -> Report
+--      premises -> conclusion -> result
+--  normalize premizes and neg conclusion
+--  initTableau with premises and neg conclusion
+--  if tableau is closed or open, report
+proveTheorem :: [Formula] -> Formula -> Maybe Report
+proveTheorem prem conc = runTableau $ initTableau $ normalizeList $ prem ++ [neg conc]
+
+proveTautology :: Formula -> Maybe Report
+proveTautology taut = runTableau $ initTableau [normalize $ neg taut]
