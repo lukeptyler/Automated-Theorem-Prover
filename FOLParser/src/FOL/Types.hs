@@ -113,3 +113,15 @@ isGamma :: Formula -> Bool
 isGamma (Quant All _ _)        = True
 isGamma (Neg (Quant Some _ _)) = True
 isGamma _                      = False
+
+extractAtomic :: Formula -> Formula
+extractAtomic f@(Atomic _ _)       = f
+extractAtomic (Neg f@(Atomic _ _)) = f
+
+extractBinary :: Formula -> (Formula, Formula)
+extractBinary (Binary      _ l r)  = (l, r)
+extractBinary (Neg (Binary _ l r)) = (l, r)
+
+extractQuant :: Formula -> (VarId, Formula)
+extractQuant (Quant      _ id f)  = (id, f)
+extractQuant (Neg (Quant _ id f)) = (id, f)

@@ -7,8 +7,6 @@ import Test.Hspec
 import Test.QuickCheck
 import Test.Hspec.Core.QuickCheck (modifyMaxSuccess)
 
---import qualified Data.Map.Strict as M
-
 main :: IO ()
 main = hspec $ do
         describe "Parser Tests" $ do

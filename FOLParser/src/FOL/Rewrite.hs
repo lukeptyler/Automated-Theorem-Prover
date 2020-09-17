@@ -10,6 +10,11 @@ import Data.List (mapAccumL)
 normalize :: Formula -> Formula
 normalize = (snd . skolemize [] True 1) . (snd . nameApart []) . splitBiconds . freeVarToConst
 
+-- Precond:  A list of FOL formulas
+-- Postcond: the formulas normalized together
+normalizeList :: [Formula] -> [Formula]
+normalizeList = skolemizeList . nameApartList . map (splitBiconds . freeVarToConst)
+
 -- Precond:  Any FOL formula
 -- Postcond: The formula with all free variables to constants
 freeVarToConst :: Formula -> Formula

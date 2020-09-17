@@ -34,6 +34,9 @@ fromList ls = Subst $ M.fromList ls
 restrict :: String -> Subst -> Subst
 restrict id (Subst map) = Subst $ M.delete id map
 
+restrictRange :: String -> Subst -> Subst
+restrictRange id (Subst map) = Subst $ M.filter (\f -> id `elem` varsInTerm f) map
+
 support :: Subst -> [VarId]
 support (Subst map) = M.keys map
 
@@ -55,7 +58,7 @@ substF sub (Atomic pred ts) = Atomic pred $ map (substT sub) ts
 substF sub (Neg         f)  = Neg $ (substF sub) f
 substF sub (Binary op l r)  = Binary op (substF sub l) (substF sub r)
 substF sub qu@(Quant q id f)
-    | id `elem` varRange sub && not (null $ intersect (varsInForm f) (support sub)) = substF sub $ renameQuant (nextId id) qu
+    | id `elem` varRange sub && not (null $ intersect (varsInForm f) (support $ restrictRange id sub)) = substF sub $ renameQuant (nextId id) qu
     | otherwise = Quant q id $ substF (restrict id sub) f
 
 substT :: Subst -> Term -> Term
