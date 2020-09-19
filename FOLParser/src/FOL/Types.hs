@@ -130,4 +130,4 @@ extractBeta (Binary Imp      l r)  = (Neg l, r)
 
 extractQuant :: Formula -> (VarId, Formula)
 extractQuant (Quant      _ id f)  = (id, f)
-extractQuant (Neg (Quant _ id f)) = (id, f)
+extractQuant (Neg (Quant _ id f)) = (id, neg f)

@@ -124,7 +124,10 @@ stepBranch f
 data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch}
     deriving (Show)
 
-type Report = String
+data Report = Valid
+            | Counter [Formula]
+            | ExceedSteps
+    deriving (Show)
 
 -- Precond: A list of FOL formulas that have been normalized
 initTableau :: [Formula] -> Tableau
@@ -172,22 +175,23 @@ stepTableau tableau = do (branch, queue) <- popQueue $ unfinished tableau
 --  if tableau is closed, open, or out out steps, report
 --  otherwise, step
 runTableau :: Tableau -> Maybe Report
-runTableau tableau = do tableau' <- stepTableau tableau
-                        case () of _ | isTableauOpen tableau'   -> return $ counterExample tableau'
-                                     | isTableauClosed tableau' -> return $ closedTableau tableau'
-                                     | maxSteps tableau' == 0   -> return $ outOfSteps tableau'
-                                     | otherwise                -> runTableau tableau'
+runTableau tableau
+    | isTableauOpen   tableau = return $ counterExample tableau
+    | isTableauClosed tableau = return $ closedTableau  tableau
+    | maxSteps tableau == 0   = return $ outOfSteps     tableau
+    | otherwise               = do tableau' <- stepTableau tableau
+                                   runTableau tableau'
 
 counterExample :: Tableau -> Report
-counterExample tableau = show $ posAtom openBranch ++ (map neg $ negAtom openBranch)
+counterExample tableau = Counter $ posAtom openBranch ++ (map neg $ negAtom openBranch)
     where
         openBranch = head $ open tableau
 
 closedTableau :: Tableau -> Report
-closedTableau _ = "Valid"
+closedTableau _ = Valid
 
 outOfSteps :: Tableau -> Report
-outOfSteps _ = "Ran out of steps. May be valid, but probably invalid"
+outOfSteps _ = ExceedSteps
 
 --Prove [Formula] -> Formula -> Report
 --      premises -> conclusion -> result
