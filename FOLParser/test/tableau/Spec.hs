@@ -3,24 +3,349 @@ import Tableau
 
 import Test.Hspec
 import Data.List (intercalate, nub)
+import Data.Either (either, partitionEithers)
 
 main :: IO()
 main = hspec $ do 
-        describe ("Valid Propositional Theorems (" ++ show (length validPropositionalTheorems) ++ ")") $ do
-            foldl1 (>>) $ map (theoremTest valid . uncurry Theorem) $ nub validPropositionalTheorems
-        describe ("Valid Propositional Tautologies (" ++ show (length validPropositionalTautologies) ++ ")") $ do
-            foldl1 (>>) $ map (tautologyTest valid) $ nub validPropositionalTautologies
-        describe ("Valid FOL Theorems (" ++ show (length validFOLTheorems) ++ ")") $ do
-            foldl1 (>>) $ map (theoremTest valid . uncurry Theorem) $ nub validFOLTheorems
-        describe ("Valid FOL Tautologies (" ++ show (length validFOLTautologies) ++ ")") $ do
-            foldl1 (>>) $ map (tautologyTest valid) $ nub validFOLTautologies
+      describe "MetaMath" $ do
+            describe ("Valid Propositional Theorems (" ++ show (length validPropositionalTheorems) ++ ")") $ do
+                  foldl1 (>>) $ map (theoremTest 100 "" valid . uncurry Theorem) $ nub validPropositionalTheorems
+            describe ("Valid Propositional Tautologies (" ++ show (length validPropositionalTautologies) ++ ")") $ do
+                  foldl1 (>>) $ map (tautologyTest 100 "" valid) $ nub validPropositionalTautologies
 
-(→) = (.->)
-(↔) = (.<->)
-(∨) = (.|)
-(∧) = (.&)
+      describe "Selections from \"Seventy-Five Problems for Testing Automatic Theorem Provers\"" $ do
+                  foldl1 (>>) $ map (\(num, steps, test) -> either (theoremTest steps num valid . uncurry Theorem) (tautologyTest steps num valid) test) seventyFiveTests
 
--- Theorems from metamath.org
+-- Tests from Seventy-Five Problems for Testing Automatic Theorem Provers
+-- Tests marked with * require additional axioms of equality
+-- Tests marked with + use a translation where the quantified objects are FOL sentences, 
+--          T(x) is the predicate "x is a theorem", 
+--          i(x,y) is the function "x → y",
+--          n(x) is the function "¬x", and
+--          b(x) is the function "◻x" (modal logic)
+
+seventyFiveTests = [
+                    ("1)  ", defSteps, Right $ (p .-> q) .<-> (neg q .-> neg p)),
+                    ("2)  ", defSteps, Right $ neg (neg p) .<-> p),
+                    ("3)  ", defSteps, Right $ neg (p .-> q) .-> (q .-> p)),
+                    ("4)  ", defSteps, Right $ (neg p .-> q) .<-> (neg q .-> p)),
+                    ("5)  ", defSteps, Right $ ((p .| q) .-> (p .| r)) .-> (p .| (q .-> r))),
+                    ("6)  ", defSteps, Right $ p .| neg p),
+                    ("7)  ", defSteps, Right $ p .| neg (neg $ neg p)),
+                    ("8)  ", defSteps, Right $ ((p .-> q) .-> p) .-> p),
+                    ("9)  ", defSteps, Right $ ((p .| q) .& (neg p .| q) .& (p .| neg q)) .-> neg (neg p .| neg q)),
+                    ("10) ", defSteps, Left $ ([q .-> r, r .-> p .& q, p .-> q .| r], p .<-> q)),
+                    ("11) ", defSteps, Right $ p .<-> p),
+                    ("12) ", defSteps, Right $ ((p .<-> q) .<-> r) .<-> (p .<-> (q .<-> r))),
+                    ("13) ", defSteps, Right $ (p .| (q .& r)) .<-> ((p .| q) .& (p .| r))),
+                    ("14) ", defSteps, Right $ (p .<-> q) .<-> ((q .| neg p) .& (neg q .| p))),
+                    ("15) ", defSteps, Right $ (p .-> q) .<-> (neg p .| q)),
+                    ("16) ", defSteps, Right $ (p .-> q) .| (q .-> p)),
+                    ("17) ", defSteps, Right $ ((p .& (q .-> r)) .-> s) .<-> ((neg p .| q .| s) .& (neg p .| neg r .| s))),
+                    ("18) ", defSteps, Right $ exist y $ univ x $ aF[y] .-> aF[x]),
+                    ("19) ", defSteps, Right $ exist x $ univ y $ univ z $ (aP[y] .-> aQ[z]) .-> (aP[x] .-> aQ[x])),
+                    ("20) ", defSteps, Right $ univ x (univ y $ exist z $ univ w $ (aP[x] .& aQ[x] .-> aR[z] .& aS[w])) .-> (exist x (exist y $ aP[x] .& aQ[y]) .-> exist z (aR[z]))),
+                    ("21) ", defSteps, Left $ ([exist x $ p .-> aF[x], exist x $ aF[x] .-> p], exist x $ p .<-> aF[x])),
+                    ("22) ", defSteps, Right $ univ x (p .<-> aF[x]) .-> (p .<-> univ x (aF[x]))),
+                    ("23) ", defSteps, Right $ univ x (p .| aF[x]) .<-> (p .| univ x (aF[x]))),
+                    ("24) ", defSteps, 
+                        Left $ ([neg $ exist x $ aS[x] .& aQ[x],
+                                 univ x $ aP[x] .-> aQ[x] .| aR[x],
+                                 neg (exist x $ aP[x]) .-> exist x (aQ[x]),
+                                 univ x $ aQ[x] .| aR[x] .-> aS[x]
+                               ], exist x $ aP[x] .& aR[x])),
+                    ("25) ", defSteps, 
+                        Left $ ([exist x $ aP[x],
+                                 univ x $ aF[x] .-> neg (aG[x] .& aR[x]),
+                                 univ x $ aP[x] .-> aG[x] .& aF[x],
+                                 univ x (aP[x] .-> aQ[x]) .| exist x (aP[x] .& aR[x])
+                               ], exist x $ aQ[x] .& aP[x])),
+                    ("26) ", defSteps, 
+                        Left $ ([exist x (aP[x]) .<-> exist x (aQ[x]),
+                                 univ x $ univ y $ aP[x] .& aQ[y] .-> (aR[x] .<-> aS[y])
+                               ], univ x (aP[x] .-> aR[x]) .<-> univ x (aQ[x] .-> aS[x]))),
+                    ("27) ", defSteps, 
+                        Left $ ([exist x $ aF[x] .& neg (aG[x]),
+                                 univ x $ aF[x] .-> aH[x],
+                                 univ x $ aJ[x] .& aI[x] .-> aF[x],
+                                 exist x (aH[x] .& neg (aG[x])) .-> univ x (aI[x] .-> neg (aH[x]))
+                               ], univ x $ aJ[x] .-> neg (aI[x]))),
+                    ("28) ", defSteps, 
+                        Left $ ([univ x (aP[x] .-> univ x (aQ[x])),
+                                 univ x (aQ[x] .| aR[x]) .-> exist x (aQ[x] .& aS[x]),
+                                 exist x (aS[x]) .-> univ x (aF[x] .-> aG[x])
+                               ], univ x $ aP[x] .& aF[x] .-> aG[x])),
+                    ("29) ", defSteps, 
+                        Left $ ([exist x (aF[x]) .& exist x (aG[x])
+                               ], (univ x (aF[x] .-> aH[x]) .& univ x (aG[x] .-> aJ[x])) .<-> univ x (univ y $ aF[x] .& aG[y] .-> aH[x] .& aJ[y]))),
+                    ("30) ", defSteps, 
+                        Left $ ([univ x $ (aF[x] .| aG[x]) .-> neg (aH[x]),
+                                 univ x $ (aG[x] .-> neg (aI[x])) .-> (aF[x] .& aH[x])
+                               ], univ x $ aI[x])),
+                    ("31) ", defSteps, 
+                        Left $ ([neg $ exist x $ aF[x] .& (aG[x] .| aH[x]),
+                                 exist x $ aI[x] .& aF[x],
+                                 univ x $ neg (aH[x]) .-> aJ[x]
+                               ], exist x $ aI[x] .& aJ[x])),
+                    ("32) ", defSteps, 
+                        Left $ ([univ x $ aF[x] .& (aG[x] .| aH[x]) .-> aI[x],
+                                 univ x $ aI[x] .& aH[x] .-> aJ[x],
+                                 univ x $ aK[x] .-> aH[x]
+                               ], univ x $ aF[x] .& aK[x] .-> aJ[x])),
+                    ("33) ", defSteps, 
+                        Right $ univ x (cP[a] .& (aP[x] .-> cP[b]) .-> cP[c]) .<-> 
+                                univ x ((neg (cP[a]) .| (aP[x] .| cP[c])) .& (neg (cP[a]) .| (neg (cP[b]) .| cP[c])))),
+                    ("34) ", 400, 
+                        Right $ (exist x (univ y $ aP[x] .<-> aP[y]) .<->
+                                exist x (aQ[x]) .<-> univ y (aP[y])) .<-> 
+                                (exist x (univ y $ aQ[x] .<-> aQ[y]) .<->
+                                exist x (aP[x]) .<-> univ y (aQ[y]))),
+                    ("35) ", defSteps, Right $ exist x $ exist y $ aP[x,y] .-> univ x (univ y $ aP[x,y])),
+                    ("36) ", defSteps,
+                        Left $ ([univ x $ exist y $ aF[x,y],
+                                 univ x $ exist y $ aG[x,y],
+                                 univ x $ univ y $ aF[x,y] .| aG[x,y] .-> univ z (aF[y,z] .| aG[y,z] .-> aH[x,z])
+                               ], univ a $ exist y $ aH[x,y])),
+                    ("37) ", defSteps,
+                        Left $ ([univ z $ exist w $ univ x $ exist y $ (aP[x,z] .-> aP[y,w]) .& aP[y,z] .& (aP[y,w] .-> exist u (aQ[u,w])),
+                                 univ x $ univ z $ neg (aP[x,z] .-> exist y (aQ[y,z])),
+                                 exist x (exist y $ aQ[x,y]) .-> univ x (aR[x,x])
+                               ], univ x $ exist y $ aR[x,y])),
+                    ("38) ", defSteps,
+                        Right $ univ x (cP[a] .& (aP[x] .-> exist y (aP[y] .& aR[x,y])) .-> 
+                                exist z (exist w $ aP[z] .& aR[x,w] .& aR[w,z])) .<-> 
+                                univ x ((neg (cP[a]) .| aP[x] .| exist z (exist w $ aP[z] .& aR[x,w] .& aR[w,z])) .&
+                                (neg (cP[a]) .| neg (exist y $ aP[y] .& aR[x,y]) .| exist z (exist w $ aP[z] .& aR[x,w] .& aR[w,z])))),
+                    ("39) ", defSteps, Right $ neg $ exist x $ univ y $ aF[y,x] .<-> neg (aF[y,y])),
+                    ("40) ", defSteps,
+                        Right $ exist y (univ x $ aF[x,y] .<-> aF[x,x]) .-> neg (univ x $ exist y $ univ z $ aF[x,y] .<-> neg (aF[z,x]))),
+                    ("41) ", defSteps,
+                        Left $ ([univ z $ exist y $ univ x $ aF[x,y] .<-> (aF[x,z] .& neg (aF[x,x]))
+                               ], neg $ exist z $ univ x $ aF[x,z])),
+                    ("42) ", defSteps, Right $ neg $ exist y $ univ x $ aF[x,y] .<-> neg (exist z $ aF[x,z] .& aF[z,x])),
+                    ("43) ", defSteps,
+                        Left $ ([univ x $ univ y $ aQ[x,y] .<-> univ z (aF[z,x] .<-> aF[z,y])
+                               ], univ x $ univ y $ aQ[x,y] .<-> aQ[y,x])),
+                    ("44) ", defSteps,
+                        Left $ ([univ x $ aF[x] .-> exist y (aG[y] .& aH[x,y]) .& exist y (aG[y] .& neg (aH[x,y])),
+                                 exist x $ aJ[x] .& univ y (aG[y] .-> aH[x,y])
+                               ], exist x $ aJ[x] .& neg (aF[x]))),
+                    ("45) ", defSteps,
+                        Left $ ([univ x $ aF[x] .& univ y (aG[y] .& aH[x,y] .-> aJ[x,y]) .-> univ y (aG[y] .& aH[x,y] .-> aK[y]),
+                                 neg $ exist y $ aL[y] .& aK[y],
+                                 exist x $ aF[x] .& univ y (aH[x,y] .-> aL[y]) .& univ y (aG[y] .& aH[x,y] .-> aJ[x,y])
+                               ], exist x $ aF[x] .& neg (exist y $ aG[y] .& aH[x,y]))),
+                    ("46) ", defSteps,
+                        Left $ ([univ x $ aF[x] .& univ y (aF[y] .& aH[y,x] .-> aG[y]) .-> aG[x],
+                                 exist x (aF[x] .& neg (aG[x])) .-> exist x (aF[x] .& neg (aG[x]) .& univ y (aF[y] .& neg (aG[y]) .-> aJ[x,y])),
+                                 univ x $ univ y $ aF[x] .& aF[y] .& aH[x,y] .-> neg (aJ[y,x])
+                               ], univ x $ aF[x] .-> aG[x])),
+                    ("47) ", defSteps,
+                        Left $ ([univ x (aP1[x] .-> aP0[x]) .& exist x (aP1[x]),
+                                 univ x (aP2[x] .-> aP0[x]) .& exist x (aP2[x]),
+                                 univ x (aP3[x] .-> aP0[x]) .& exist x (aP3[x]),
+                                 univ x (aP4[x] .-> aP0[x]) .& exist x (aP4[x]),
+                                 univ x (aP5[x] .-> aP0[x]) .& exist x (aP5[x]),
+                                 exist x (aQ1[x]) .& univ x (aQ1[x] .-> aQ0[x]),
+                                 univ x $ aP0[x] .-> (univ y (aQ0[y] .-> aR[x,y]) .|
+                                    univ y ((aP0[y] .& aS[y,x] .& exist z (aQ0[z] .& aR[y,z])) .-> aR[x,y])),
+                                 univ x $ univ y $ (aP3[y] .& (aP5[x] .| aP4[x])) .-> aS[x,y],
+                                 univ x $ univ y $ (aP3[x] .& aP2[y]) .-> aS[x,y],
+                                 univ x $ univ y $ (aP2[x] .& aP1[y]) .-> aS[x,y],
+                                 univ x $ univ y $ (aP1[x] .& (aP2[y] .| aQ1[y])) .-> neg (aR[x,y]),
+                                 univ x $ univ y $ (aP3[x] .& aP4[y]) .-> aR[x,y],
+                                 univ x $ univ y $ (aP3[x] .& aP5[y]) .-> neg (aR[x,y]),
+                                 univ x $ (aP4[x] .| aP5[x]) .-> exist y (aQ0[y] .& aR[x,y])
+                               ], exist x $ exist y $ aP0[x] .& aP0[y] .& exist z (aQ1[z] .& aR[y,z] .& aR[x,y]))),
+                    ("*48) ", defSteps,
+                        Left $ (eqAxioms [] ++
+                               [cEq[a,b] .| cEq[c,d],
+                                cEq[a,c] .| cEq[b,d]
+                               ], cEq[a,d] .| cEq[b,c])),
+                    ("*49) ", defSteps,
+                        Left $ (eqAxioms [] ++
+                               [exist x $ exist y $ univ z $ aEq[z,x] .| aEq[z,y],
+                                cP[a] .& cP[b],
+                                neg $ aEq[a,b]
+                               ], univ x $ aP[x])),
+                    ("50) ", defSteps, Right $ univ x (Atomic "F" [constant "a", Var "x"] .| univ y (aF[x,y])) .-> exist x (univ y $ aF[x,y])),
+                    ("*51) ", defSteps,
+                        Left $ (eqAxioms [] ++
+                               [exist z $ exist w $ univ x $ univ y $ aF[x,y] .<-> aEq[x,z] .& aEq[y,w]
+                               ], exist z $ univ x $ exist w (univ y $ aF[x,y] .<-> aEq[y,w]) .<-> aEq[x,z])),
+                    ("*52) ", defSteps,
+                        Left $ (eqAxioms [] ++
+                               [exist z $ exist w $ univ x $ univ y $ aF[x,y] .<-> aEq[x,z] .& aEq[y,w]
+                               ], exist w $ univ y $ exist z (univ x $ aF[x,y] .<-> aEq[x,z]) .<-> aEq[y,w])),
+                    ("*53) ", defSteps,
+                        Left $ ([exist x $ exist y $ neg (aEq[x,y]) .& univ z (aEq[z,x] .| aEq[z,y])
+                               ], exist z (univ x $ exist w (univ y $ aF[x,y] .<-> aEq[y,w]) .<-> aEq[x,z]) .<-> 
+                                  exist w (univ y $ exist z (univ x $ aF[x,y] .<-> aEq[x,z]) .<-> aEq[y,w]))),
+                    ("*54) ", 200,
+                        Left $ ([univ y $ exist z $ univ x $ aF[x,z] .<-> aEq[x,y]
+                               ], neg $ exist w $ univ x $ aF[x,w] .<-> 
+                                  univ u (aF[x,u] .-> exist y (aF[y,u] .& neg (exist z $ aF[x,u] .& aF[z,y]))))),
+                    ("*55) ", defSteps,
+                        Left $ ([exist x $ aL[x] .& Atomic "K" [Var x, constant a],
+                                cL[a] .& aL[b] .& aL[c],
+                                univ x $ aL[x] .-> Atomic "=" [Var x, constant a] .| Atomic "=" [Var x, constant b] .| Atomic "=" [Var x, constant c],
+                                univ y $ univ x $ aK[x,y] .-> aH[x,y],
+                                univ x $ univ y $ aK[x,y] .-> neg (aR[x,y]),
+                                univ x $ Atomic "H" [constant a, Var x] .-> neg (Atomic "H" [constant c, Var x]),
+                                univ x $ neg (Atomic "=" [Var x, constant b]) .-> Atomic "H" [constant a, Var x],
+                                univ x $ neg (Atomic "R" [Var x, constant a]) .-> Atomic "H" [constant b, Var x],
+                                univ x $ Atomic "H" [constant a, Var x] .-> Atomic "H" [constant b, Var x],
+                                univ x $ exist y $ neg (aH[x,y]),
+                                neg $ cEq[a,b]
+                               ], cK[a,a])),
+                    ("*56) ", defSteps,
+                        Left $ (eqAxioms [Right ("P", 1)], 
+                                univ x (exist y (aP[y] .& Atomic "=" [Var x, af[y]]) .-> aP[x]) .<-> univ x (aP[x] .-> Atomic "P" [af[x]]))),
+                    ("57) ", defSteps,
+                        Left $ ([Atomic "P" [cf[a,b], cf[b,c]],
+                                 Atomic "P" [cf[b,c], cf[a,b]],
+                                 univ x $ univ y $ univ z $ aP[x,y] .& aP[y,z] .-> aP[x,z]
+                               ], Atomic "P" [cf[a,b], cf[a,c]])),
+                    ("*58) ", defSteps,
+                        Left $ (eqAxioms [] ++
+                               [univ x $ univ y $ Atomic "=" [af[x], ag[y]]
+                               ], univ x $ univ y $ Atomic "=" [Function "f" [ag[x]], Function "f" [ag[y]]])),
+                    ("59) ", defSteps,
+                        Left $ ([univ x $ aP[x] .<-> neg (Atomic "P" [af[x]])
+                               ], exist x $ aP[x] .& neg (Atomic "P" [af[x]]))),
+                    ("60) ", defSteps,
+                        Right $ univ x $ Atomic "P" [Var x, af[x]] .<-> exist y (univ z (aP[z,y] .-> Atomic "P" [Var z, af[x]]) .& aP[x,y])),
+                    ("*61) ", defSteps,
+                        Left $ (eqAxioms [] ++ 
+                               [univ x $ univ y $ univ z $ Atomic "=" [Function "f" [Var x, af[y,z]], Function "f" [af[x,y], Var z]]
+                               ], univ x $ univ y $ univ z $ univ w $ Atomic "=" [Function "f" [Var x, Function "f" [Var y, af[z,w]]], Function "f" [Function "f" [af[x,y], Var z], Var w]])),
+                    ("62) ", defSteps,
+                        Right $ (cP[a] .& univ x (aP[x] .-> Atomic "P" [af[x]])) .<-> 
+                                univ x (neg $ (neg (cP[a]) .| aP[x]) .& 
+                                (neg (cP[a]) .| neg (Atomic "P" [af[x]])))),
+                    ("*63) ", defSteps,
+                        Left $ (eqAxioms [] ++ groupAxioms,
+                                univ x $ univ y $ univ z $ Atomic "=" [af[x,y], af[z,y]] .-> aEq[x,z])),
+                    ("*64) ", defSteps,
+                        Left $ (eqAxioms [] ++ groupAxioms,
+                                univ x $ univ y $ Atomic "=" [af[y,x], constant e] .-> Atomic "=" [af[x,y], constant e])),
+                    ("*65) ", defSteps,
+                        Left $ (eqAxioms [] ++ init groupAxioms,
+                                univ x (Atomic "=" [af[x,x], constant e]) .-> univ x (univ y $ Atomic "=" [af[x,y], af[y,x]]))),
+                    ("+66) ", defSteps,
+                        Left $ (transMP : transPropAxioms,
+                                univ x $ Atomic "T" [Function "i" [Var x, Function "n" [an[x]]]])),
+                    ("+67) ", defSteps,
+                        Left $ (transMP : transPropAxioms,
+                                univ x $ Atomic "T" [Function "i" [Function "n" [an[x]], Var x]])),
+                    ("+68) ", defSteps,
+                        Left $ (transMP : init transPropAxioms ++
+                                [univ x $ univ y $ Atomic "T" [Function "i" [ai[y,x], Function "i" [an[x], an[y]]]]],
+                                univ x $ Atomic "T" [Function "i" [Var x, Function "n" [an[x]]]])),
+                    ("+69) ", defSteps,
+                        Left $ (transModalAxioms,
+                                univ x $ Atomic "T" [Function "i" [ab[x], Function "n" [Function "b" [an[x]]]]]))
+                   ]
+                   -- 
+      where
+            defSteps = 100
+
+            p = proposition "P"
+            q = proposition "Q"
+            r = proposition "R"
+            s = proposition "S"
+
+            aP = Atomic "P" . map Var
+            aQ = Atomic "Q" . map Var
+            aR = Atomic "R" . map Var
+            aS = Atomic "S" . map Var
+
+            aF = Atomic "F" . map Var
+            aG = Atomic "G" . map Var
+            aH = Atomic "H" . map Var
+            aI = Atomic "I" . map Var
+            aJ = Atomic "J" . map Var
+            aK = Atomic "K" . map Var
+            aL = Atomic "L" . map Var
+            aT = Atomic "T" . map Var
+
+            aP0 = Atomic "P0" . map Var
+            aP1 = Atomic "P1" . map Var
+            aP2 = Atomic "P2" . map Var
+            aP3 = Atomic "P3" . map Var
+            aP4 = Atomic "P4" . map Var
+            aP5 = Atomic "P5" . map Var
+            aQ0 = Atomic "Q0" . map Var
+            aQ1 = Atomic "Q1" . map Var
+
+            cP = Atomic "P" . map constant
+            cK = Atomic "K" . map constant
+            cL = Atomic "L" . map constant
+
+            af = Function "f" . map Var
+            ag = Function "g" . map Var
+            ai = Function "i" . map Var
+            an = Function "n" . map Var
+            ab = Function "b" . map Var
+
+            cf = Function "f" . map constant
+
+            x = "x"
+            y = "y"
+            z = "z"
+            w = "w"
+            u = "u"
+
+            a = "a"
+            b = "b"
+            c = "c"
+            d = "d"
+            e = "e"
+
+            aEq = Atomic "=" . map Var
+            cEq = Atomic "=" . map constant
+
+            eqAxioms :: [Either (VarId, Int) (PredId, Int)] -> [Formula]
+            eqAxioms defs = (univ x $ aEq[x,x]) : 
+                            (univ x $ univ y $ aEq[x,y] .-> aEq[y,x]) : 
+                            (univ x $ univ y $ univ z $ aEq[x,y] .& aEq[y,z] .-> aEq[x,z]) :
+                            map funcAx functions ++ map relAx relations
+                  where
+                        (functions, relations) = partitionEithers defs
+
+                        funcAx :: (VarId, Int) -> Formula
+                        funcAx (f, args) = foldl1 (.) (map univ $ vs ++ ws) $ 
+                                           foldl1 (.&) (zipWith (\v -> \w -> aEq [v,w]) vs ws) .-> 
+                                           Atomic "=" [Function f $ map Var vs, Function f $ map Var ws]
+                              where
+                                    vs = varList 'v' args
+                                    ws = varList 'w' args
+
+                        relAx :: (PredId, Int) -> Formula
+                        relAx (r, args) = foldl1 (.) (map univ $ vs ++ ws) $ 
+                                          foldl1 (.&) (zipWith (\v -> \w -> aEq [v,w]) vs ws) .-> 
+                                          (Atomic r (map Var vs) .-> Atomic r (map Var ws))
+                              where
+                                    vs = varList 'v' args
+                                    ws = varList 'w' args
+
+                        varList :: Char -> Int -> [VarId]
+                        varList c num = map ((c:) . show) [1..num]
+
+            groupAxioms = [univ x $ univ y $ univ z $ Atomic "=" [Function "f" [af[x,y], Var z], Function "f" [Var x, af[y,z]]],
+                           univ x $ Atomic "=" [Function "f" [constant e, Var x], Var x],
+                           univ x $ exist y $ Atomic "=" [af[y,x], constant e]]
+
+            transPropAxioms  = [univ x $ univ y $ Atomic "T" [Function "i" [Var x, ai[y,x]]],
+                                univ x $ univ y $ univ z $ Atomic "T" [Function "i" [Function "i" [Var x, ai[y,z]], Function "i" [ai[x,y], ai[x,z]]]],
+                                univ x $ univ y $ Atomic "T" [Function "i" [Function "i" [an[x], an[y]], Function "i" [Var y, Var x]]]]
+            transMP          = univ x $ univ y $ Atomic "T" [ai[x,y]] .& aT[x] .-> aT[y]
+            transModalAxioms = transMP : transPropAxioms ++
+                               [univ x $ univ y $ Atomic "T" [Function "i" [Function "b" [ai[x,y]], Function "i" [ab[x], ab[y]]]],
+                                univ x $ Atomic "T" [Function "i" [ab[x], Var x]],
+                                univ x $ aT[x] .-> Atomic "T" [ab[x]]]
+
+-- Tests from metamath.org --
 
 validPropositionalTheorems = [
                               ([𝜑, 𝜑 → 𝜓], 𝜓),
@@ -646,6 +971,11 @@ validPropositionalTheorems = [
                               ([𝜑 → (𝜓 ↔ 𝜒), neg 𝜑 → (𝜓 ↔ 𝜃)], 𝜓 ↔ ((𝜑 ∧ 𝜒) ∨ (neg 𝜑 ∧ 𝜃))) -- all unique
                              ]
       where
+            (→) = (.->)
+            (↔) = (.<->)
+            (∨) = (.|)
+            (∧) = (.&)
+
             𝜑 = proposition "𝜑"
             𝜓 = proposition "𝜓"
             𝜒 = proposition "𝜒"
@@ -1008,6 +1338,11 @@ validPropositionalTautologies = [
                                  ((𝜑 ∧ 𝜓) ∨ (neg 𝜑 ∧ 𝜒)) ↔ ((𝜑 → 𝜓) ∧ (neg 𝜑 → 𝜒)) -- all unique
                                 ]
       where
+            (→) = (.->)
+            (↔) = (.<->)
+            (∨) = (.|)
+            (∧) = (.&)
+
             𝜑 = proposition "𝜑"
             𝜓 = proposition "𝜓"
             𝜒 = proposition "𝜒"
@@ -1021,48 +1356,12 @@ validPropositionalTautologies = [
             𝜆 = proposition "𝜆"
             𝜅 = proposition "𝜅"
 
-validFOLTheorems = [
-                    ([𝜑[]], univ x $ 𝜑[]),
-                    ([𝜑[]], univ x $ univ y $ 𝜑[]),
-                    ([univ x (𝜑[]) → 𝜓[], 𝜑[]], 𝜓[]),
-                    ([univ x (𝜑[]) ↔ 𝜓[], 𝜑[]], 𝜓[]),
-                    ([𝜑[] ↔ univ x (𝜓[]), 𝜓[]], 𝜑[]),
-                    ([𝜑[]], 𝜑[] → univ x (𝜑[])),
-                    ([neg $ 𝜑[]], neg $ exist x $ 𝜑[]),
-                    ([𝜑[x]], univ x (𝜑[x]) → 𝜑[x]),
-                    ([𝜑[] → 𝜓[]], univ x (𝜑[]) → univ x (𝜓[])),
-                    ([𝜑[] → 𝜓[]], univ x (univ y $ 𝜑[]) → univ x (univ y $ 𝜓[])),
-                    ([𝜑[] → (𝜓[] → 𝜒[])], univ x (𝜑[]) → (univ x (𝜓[]) → univ x (𝜒[]))),
-                    ([(𝜑[] ∧ 𝜓[]) → 𝜒[]], (univ x (𝜑[]) ∧ univ x (𝜓[])) → univ x (𝜒[])) -- 1684
-                   ]
-      where
-            𝜑 = Atomic "𝜑" . map Var
-            𝜓 = Atomic "𝜓" . map Var
-            𝜒 = Atomic "𝜒" . map Var
-
-            x = "x"
-            y = "y"
-
-validFOLTautologies = [
-                       exist x (𝜑[x]) ↔ neg (univ x $ neg $ 𝜑[x]),
-                       univ x (neg $ 𝜑[x]) ↔ neg (exist x $ 𝜑[x]),
-                       (exist x (𝜑[x]) → 𝜓[]) ↔ (neg (𝜓[]) → (univ x $ neg $ 𝜑[x])),
-                       univ x (𝜑[x] → 𝜓[x]) → (univ x (𝜑[x]) → univ x (𝜓[x])),
-                       univ x (𝜑[x] → (𝜓[x] → 𝜒[x])) → (univ x (𝜑[x]) → (univ x (𝜓[x]) → univ x (𝜒[x])))
-                      ]
-      where
-            𝜑 = Atomic "𝜑" . map Var
-            𝜓 = Atomic "𝜓" . map Var
-            𝜒 = Atomic "𝜒" . map Var
-
-            x = "x"
-
 data Theorem = Theorem [Formula] Formula
 instance Show Theorem where
     show (Theorem prem conc) = (intercalate ", " $ map show prem) ++ " ⊢ " ++ show conc
 
-theoremTest   property t@(Theorem prem conc) = it (show t) $ proveTheorem prem conc `shouldSatisfy` property
-tautologyTest property taut = it (show taut) $ proveTautology taut `shouldSatisfy` property
+theoremTest   steps pref property t@(Theorem prem conc) = it (pref ++ show t) $ proveTheoremMaxSteps steps prem conc `shouldSatisfy` property
+tautologyTest steps pref property taut = it (pref ++ show taut) $ proveTautologyMaxSteps steps taut `shouldSatisfy` property
 
 valid (Just Valid) = True
 valid _ = False

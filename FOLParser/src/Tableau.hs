@@ -126,17 +126,17 @@ data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], u
 
 data Report = Valid
             | Counter [Formula]
-            | ExceedSteps
+            | ExceedSteps Tableau
     deriving (Show)
 
 -- Precond: A list of FOL formulas that have been normalized
-initTableau :: [Formula] -> Tableau
-initTableau forms
+initTableau :: Int -> [Formula] -> Tableau
+initTableau maxSteps forms
     | isBranchClosed branch = blankTableau {closed = [branch]}
     | isBranchOpen   branch = blankTableau {open   = [branch]}
     | otherwise             = blankTableau {unfinished = initQueue [branch]}
     where 
-        blankTableau = Tableau 100 [] [] $ initQueue []
+        blankTableau = Tableau maxSteps [] [] $ initQueue []
         branch = initBranch forms
 
 isTableauClosed :: Tableau -> Bool
@@ -191,7 +191,9 @@ closedTableau :: Tableau -> Report
 closedTableau _ = Valid
 
 outOfSteps :: Tableau -> Report
-outOfSteps _ = ExceedSteps
+outOfSteps = ExceedSteps
+
+defaultMaxSteps = 100
 
 --Prove [Formula] -> Formula -> Report
 --      premises -> conclusion -> result
@@ -199,7 +201,13 @@ outOfSteps _ = ExceedSteps
 --  initTableau with premises and neg conclusion
 --  if tableau is closed or open, report
 proveTheorem :: [Formula] -> Formula -> Maybe Report
-proveTheorem prem conc = runTableau $ initTableau $ normalizeList $ prem ++ [neg conc]
+proveTheorem = proveTheoremMaxSteps defaultMaxSteps
+
+proveTheoremMaxSteps :: Int -> [Formula] -> Formula -> Maybe Report
+proveTheoremMaxSteps maxSteps prem conc = runTableau $ (initTableau maxSteps) $ normalizeList $ prem ++ [neg conc]
 
 proveTautology :: Formula -> Maybe Report
-proveTautology taut = runTableau $ initTableau [normalize $ neg taut]
+proveTautology = proveTautologyMaxSteps defaultMaxSteps
+
+proveTautologyMaxSteps :: Int -> Formula -> Maybe Report
+proveTautologyMaxSteps maxSteps taut = runTableau $ initTableau maxSteps [normalize $ neg taut]
