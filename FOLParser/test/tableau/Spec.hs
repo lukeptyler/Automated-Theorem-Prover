@@ -1,6 +1,11 @@
 import FOL.Base
 import Tableau
 
+import Parser (Match(..), matchChar, matchCond)
+import FOL.Substitution (varsInTerm)
+import Data.Char (isSpace)
+import Control.Applicative (Alternative(..))
+
 import Test.Hspec
 import Data.List (intercalate, nub)
 import Data.Either (either, partitionEithers)
@@ -231,20 +236,7 @@ seventyFiveTests = [
                                 univ x $ univ y $ Atomic "=" [af[y,x], constant e] .-> Atomic "=" [af[x,y], constant e])),
                     ("*65) ", defSteps,
                         Left $ (eqAxioms [] ++ init groupAxioms,
-                                univ x (Atomic "=" [af[x,x], constant e]) .-> univ x (univ y $ Atomic "=" [af[x,y], af[y,x]]))),
-                    ("+66) ", defSteps,
-                        Left $ (transMP : transPropAxioms,
-                                univ x $ Atomic "T" [Function "i" [Var x, Function "n" [an[x]]]])),
-                    ("+67) ", defSteps,
-                        Left $ (transMP : transPropAxioms,
-                                univ x $ Atomic "T" [Function "i" [Function "n" [an[x]], Var x]])),
-                    ("+68) ", defSteps,
-                        Left $ (transMP : init transPropAxioms ++
-                                [univ x $ univ y $ Atomic "T" [Function "i" [ai[y,x], Function "i" [an[x], an[y]]]]],
-                                univ x $ Atomic "T" [Function "i" [Var x, Function "n" [an[x]]]])),
-                    ("+69) ", defSteps,
-                        Left $ (transModalAxioms,
-                                univ x $ Atomic "T" [Function "i" [ab[x], Function "n" [Function "b" [an[x]]]]]))
+                                univ x (Atomic "=" [af[x,x], constant e]) .-> univ x (univ y $ Atomic "=" [af[x,y], af[y,x]])))
                    ]
                    -- 
       where
@@ -335,15 +327,6 @@ seventyFiveTests = [
             groupAxioms = [univ x $ univ y $ univ z $ Atomic "=" [Function "f" [af[x,y], Var z], Function "f" [Var x, af[y,z]]],
                            univ x $ Atomic "=" [Function "f" [constant e, Var x], Var x],
                            univ x $ exist y $ Atomic "=" [af[y,x], constant e]]
-
-            transPropAxioms  = [univ x $ univ y $ Atomic "T" [Function "i" [Var x, ai[y,x]]],
-                                univ x $ univ y $ univ z $ Atomic "T" [Function "i" [Function "i" [Var x, ai[y,z]], Function "i" [ai[x,y], ai[x,z]]]],
-                                univ x $ univ y $ Atomic "T" [Function "i" [Function "i" [an[x], an[y]], Function "i" [Var y, Var x]]]]
-            transMP          = univ x $ univ y $ Atomic "T" [ai[x,y]] .& aT[x] .-> aT[y]
-            transModalAxioms = transMP : transPropAxioms ++
-                               [univ x $ univ y $ Atomic "T" [Function "i" [Function "b" [ai[x,y]], Function "i" [ab[x], ab[y]]]],
-                                univ x $ Atomic "T" [Function "i" [ab[x], Var x]],
-                                univ x $ aT[x] .-> Atomic "T" [ab[x]]]
 
 -- Tests from metamath.org --
 
@@ -1363,5 +1346,5 @@ instance Show Theorem where
 theoremTest   steps pref property t@(Theorem prem conc) = it (pref ++ show t) $ proveTheoremMaxSteps steps prem conc `shouldSatisfy` property
 tautologyTest steps pref property taut = it (pref ++ show taut) $ proveTautologyMaxSteps steps taut `shouldSatisfy` property
 
-valid (Just Valid) = True
+valid (Just (Valid _)) = True
 valid _ = False

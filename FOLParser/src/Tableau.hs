@@ -3,7 +3,7 @@ module Tableau where
 import FOL.Base
 import Unification (unifyF)
 
-import Data.List (nub, partition)
+import Data.List (nub, partition, intercalate)
 import Data.Maybe (mapMaybe)
 
 -- Queue and Priority Queue --
@@ -13,6 +13,9 @@ data Queue a = Queue [a]
 
 initQueue :: [a] -> Queue a
 initQueue ls = Queue ls
+
+toListQueue :: Queue a -> [a]
+toListQueue (Queue ls) = ls
 
 isEmptyQueue :: Queue a -> Bool
 isEmptyQueue (Queue []) = True
@@ -36,6 +39,9 @@ instance Show a => Show (PriorityQueue a) where
 
 initPriority :: [a -> Bool] -> PriorityQueue a
 initPriority classifiers = PriorityQueue classifiers $ replicate (length classifiers + 1) $ Queue []
+
+toListPriority :: PriorityQueue a -> [a]
+toListPriority priority = concatMap toListQueue $ queues priority
 
 isEmptyPriority :: PriorityQueue a -> Bool
 isEmptyPriority priority = all isEmptyQueue $ queues priority
@@ -67,6 +73,9 @@ instance Show Branch where
 initBranch :: [Formula] -> Branch
 initBranch forms = addToBranchList forms $ Branch 1 [] [] $ initPriority [isDoubleNeg, isAlpha, isBeta, isDelta, isGamma]
 
+elemsOnBranch :: Branch -> [Formula]
+elemsOnBranch branch = posAtom branch ++ negAtom branch ++ toListPriority (forms branch)
+
 isBranchClosed :: Branch -> Bool
 isBranchClosed branch = not $ null $ mapMaybe (uncurry unifyF) $ pairAtomics (posAtom branch) (negAtom branch)
     where
@@ -90,43 +99,54 @@ nextOnBranch :: Branch -> Maybe (Formula, Branch)
 nextOnBranch branch = do (f, forms') <- popPriority $ forms branch
                          return (f, branch {forms = forms'})
 
-splitBranch :: [[Formula]] -> Branch -> [Branch]
-splitBranch forms branch = map ((flip addToBranchList) branch) forms
+splitBranch :: [Formula] -> [Formula] -> Branch -> Expansion
+splitBranch left right branch = Split left right $ map ((flip addToBranchList) branch) [left, right]
 
-expandDoubleNeg :: Formula -> Branch -> (Bool, Branch)
-expandDoubleNeg (Neg (Neg f)) = (,) (isAtomic f) . addToBranch f
+data Expansion = Expand {addedForms :: [Formula], newBranch :: Branch}
+               | Split  {addedLeft :: [Formula], addedRight :: [Formula], newBranches :: [Branch]}
 
-expandAlpha :: Formula -> Branch -> (Bool, Branch)
-expandAlpha f = (,) (any isAtomic [l, r]) . addToBranchList [l, r]
+expansionForms :: Expansion -> [Formula]
+expansionForms (Expand fs _)     = fs
+expansionForms (Split lfs rfs _) = lfs ++ rfs
+
+expansionBranches :: Expansion -> [Branch]
+expansionBranches (Expand _ b)   = [b]
+expansionBranches (Split _ _ bs) = bs
+
+expandDoubleNeg :: Formula -> Branch -> Expansion
+expandDoubleNeg (Neg (Neg f)) = Expand [f] . addToBranch f
+
+expandAlpha :: Formula -> Branch -> Expansion
+expandAlpha f = Expand [l, r] . addToBranchList [l, r]
     where
         (l, r) = extractAlpha f
 
-expandBeta :: Formula -> Branch -> (Bool, [Branch])
-expandBeta (Binary Bicond      l r)  = (,) (any isAtomic [l, r]) . splitBranch [[l, r], [neg l, neg r]]
-expandBeta (Neg (Binary Bicond l r)) = (,) (any isAtomic [l, r]) . splitBranch [[l, neg r], [neg l, r]]
-expandBeta f = (,) (any isAtomic [l, r]) . splitBranch [[l], [r]]
+expandBeta :: Formula -> Branch -> Expansion
+expandBeta (Binary Bicond      l r)  = splitBranch [l, r] [neg l, neg r]
+expandBeta (Neg (Binary Bicond l r)) = splitBranch [l, neg r] [neg l, r]
+expandBeta f = splitBranch [l] [r]
     where
         (l, r) = extractBeta f
 
-expandGamma :: Formula -> Branch -> (Bool, Branch)
-expandGamma f branch = (,) (isAtomic f') . addToBranchList [substF sub f', f] $ branch {nextPar = nextPar branch + 1}
+expandGamma :: Formula -> Branch -> Expansion
+expandGamma f branch = Expand [f''] . addToBranchList [f'', f] $ branch {nextPar = nextPar branch + 1}
     where
         (id, f') = extractQuant f
-        sub = singleton id $ Var $ "par" ++ show (nextPar branch)
+        f'' = substF (singleton id $ Var $ "par" ++ show (nextPar branch)) f'
 
-stepBranch :: Formula -> Branch -> (Bool, [Branch])
+stepBranch :: Formula -> Branch -> Expansion
 stepBranch f
-    | isDoubleNeg f = ((\x -> [x]) <$>) . expandDoubleNeg f
-    | isAlpha f     = ((\x -> [x]) <$>) . expandAlpha f
+    | isDoubleNeg f = expandDoubleNeg f
+    | isAlpha f     = expandAlpha f
     | isBeta f      = expandBeta f
-    | isGamma f     = ((\x -> [x]) <$>) . expandGamma f
+    | isGamma f     = expandGamma f
 
-data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch}
+data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch, record :: Record}
     deriving (Show)
 
-data Report = Valid
+data Report = Valid Record
             | Counter [Formula]
-            | ExceedSteps Tableau
+            | ExceedSteps Record
     deriving (Show)
 
 -- Precond: A list of FOL formulas that have been normalized
@@ -136,8 +156,8 @@ initTableau maxSteps forms
     | isBranchOpen   branch = blankTableau {open   = [branch]}
     | otherwise             = blankTableau {unfinished = initQueue [branch]}
     where 
-        blankTableau = Tableau maxSteps [] [] $ initQueue []
         branch = initBranch forms
+        blankTableau = Tableau maxSteps [] [] (initQueue []) (Record branch (elemsOnBranch branch) [])
 
 isTableauClosed :: Tableau -> Bool
 isTableauClosed tableau = not (isTableauOpen tableau) && isEmptyQueue (unfinished tableau)
@@ -156,17 +176,21 @@ stepTableau :: Tableau -> Maybe Tableau
 stepTableau tableau = do (branch, queue) <- popQueue $ unfinished tableau
                          (f, branch') <- nextOnBranch branch
                          let newMaxSteps = maxSteps tableau - (if isGamma f then 1 else 0)
-                         let (addedAtomic, branches) = stepBranch f branch'
-                         return (if addedAtomic
-                                 then let (closedBranches, branches')  = partition isBranchClosed branches in
+                         let expansion = stepBranch f branch'
+                         return (if any isAtomic $ expansionForms expansion
+                                 then let (closedBranches, branches')  = partition isBranchClosed $ expansionBranches expansion in
                                       let (openBranches,   branches'') = partition isBranchOpen branches' in
-                                          tableau {maxSteps = newMaxSteps, 
-                                                   open = open tableau ++ openBranches, 
-                                                   closed = closed tableau ++ closedBranches, 
-                                                   unfinished = pushQueueList branches'' queue
-                                                  }
-                                 else tableau {maxSteps = newMaxSteps,
-                                               unfinished = pushQueueList branches queue
+                                      let newRecord = addExpansionToRecord branch expansion $ record tableau in
+                                      tableau {maxSteps = newMaxSteps, 
+                                               open = open tableau ++ openBranches, 
+                                               closed = closed tableau ++ closedBranches, 
+                                               unfinished = pushQueueList branches'' queue,
+                                               record = newRecord
+                                              }
+                                 else let newRecord = addExpansionToRecord branch expansion $ record tableau in
+                                      tableau {maxSteps = newMaxSteps,
+                                               unfinished = pushQueueList (expansionBranches expansion) queue,
+                                               record = newRecord
                                               }
                                 )
 
@@ -188,10 +212,10 @@ counterExample tableau = Counter $ posAtom openBranch ++ (map neg $ negAtom open
         openBranch = head $ open tableau
 
 closedTableau :: Tableau -> Report
-closedTableau _ = Valid
+closedTableau tableau = Valid $ record tableau
 
 outOfSteps :: Tableau -> Report
-outOfSteps = ExceedSteps
+outOfSteps tableau = ExceedSteps $ record tableau
 
 defaultMaxSteps = 100
 
@@ -211,3 +235,30 @@ proveTautology = proveTautologyMaxSteps defaultMaxSteps
 
 proveTautologyMaxSteps :: Int -> Formula -> Maybe Report
 proveTautologyMaxSteps maxSteps taut = runTableau $ initTableau maxSteps [normalize $ neg taut]
+
+-- Tableau Record --
+
+data Record = Record {recId :: Branch, recForms :: [Formula], recChildren :: [Record]}
+instance Show Record where
+    show = printRecord
+
+printRecord :: Record -> String
+printRecord record = '\n' : (unlines $ printRecord' "" (True,record))
+    where
+        printRecord' :: String -> (Bool,Record) -> [String]
+        printRecord' indent (last,record) = (indent ++ nextStart ++ (intercalate ", " $ map show (recForms record))) : (concatMap (printRecord' $ indent ++ nextIndent) $ zip (reverse $ True:replicate ((length $ recChildren record) - 1) False) $ recChildren record)
+            where
+                nextStart  = if last then "└─ " else "├─ "
+                nextIndent = if last then "   " else "│  "
+        printForms :: String -> [(String,Formula)] -> [String]
+        printForms _ [] = []
+        printForms indent ((start,form):rest) = (indent ++ start ++ show form) : printForms indent rest
+
+addExpansionToRecord :: Branch -> Expansion -> Record -> Record
+addExpansionToRecord parentBranch expansion record
+    | null (recChildren record) && parentBranch == recId record = record {recChildren = createChildren expansion}
+    | otherwise = record {recChildren = map (addExpansionToRecord parentBranch expansion) $ recChildren record}
+    where
+        createChildren :: Expansion -> [Record]
+        createChildren (Expand fs branch) = [Record branch fs []]
+        createChildren (Split lfs rfs branches) = [Record (head branches) lfs [], Record (last branches) rfs []]

@@ -1,6 +1,4 @@
-module Parser
-    ( parseFormula, parseError
-    ) where
+module Parser where
 
 import FOL.Base
 import Data.Char (isLower, isUpper, isDigit, isSpace)
