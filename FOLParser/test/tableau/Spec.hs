@@ -186,7 +186,7 @@ seventyFiveTests = [
                         Left $ ([exist x $ exist y $ neg (aEq[x,y]) .& univ z (aEq[z,x] .| aEq[z,y])
                                ], exist z (univ x $ exist w (univ y $ aF[x,y] .<-> aEq[y,w]) .<-> aEq[x,z]) .<-> 
                                   exist w (univ y $ exist z (univ x $ aF[x,y] .<-> aEq[x,z]) .<-> aEq[y,w]))),
-                    ("*54) ", 200,
+                    ("*54) ", 100,
                         Left $ ([univ y $ exist z $ univ x $ aF[x,z] .<-> aEq[x,y]
                                ], neg $ exist w $ univ x $ aF[x,w] .<-> 
                                   univ u (aF[x,u] .-> exist y (aF[y,u] .& neg (exist z $ aF[x,u] .& aF[z,y]))))),

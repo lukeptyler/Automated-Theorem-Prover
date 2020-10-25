@@ -32,6 +32,9 @@ unifyT t1 t2 = unifyT' mempty t1 t2
                              else unifyT' (sub <> singleton x t) t1 t2
 
 unifyF :: Formula -> Formula -> Maybe Subst
+unifyF (Neg f) (Neg g) = unifyF f g
+unifyF (Neg _) (Atomic _ _) = Nothing
+unifyF (Atomic _ _) (Neg _) = Nothing
 unifyF (Atomic p1 ts1) (Atomic p2 ts2)
     | p1 /= p2 || length ts1 /= length ts2 = Nothing
     | otherwise = unifyF' mempty ts1 ts2
@@ -41,3 +44,7 @@ unifyF (Atomic p1 ts1) (Atomic p2 ts2)
         unifyF' sub (t1:ts1) (t2:ts2) = do sub' <- unifyT (substT sub t1) (substT sub t2)
                                            unifyF' (sub <> sub') ts1 ts2
 
+unifyList :: Subst -> Formula -> [Formula] -> Maybe Subst
+unifyList s _ [] = return s
+unifyList s p (q:ls) = do s' <- unifyF (substF s p) (substF s q)
+                          unifyList (s <> s') p ls

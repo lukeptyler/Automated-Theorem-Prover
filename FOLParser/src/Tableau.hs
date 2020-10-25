@@ -1,10 +1,10 @@
 module Tableau where
 
 import FOL.Base
-import Unification (unifyF)
+import Unification (unifyF, unifyList)
 
-import Data.List (nub, partition, intercalate)
-import Data.Maybe (mapMaybe)
+import Data.List (groupBy, sortBy, mapAccumL, nub, partition, intercalate, nubBy)
+import Data.Maybe (mapMaybe, fromJust)
 
 -- Queue and Priority Queue --
 
@@ -74,7 +74,7 @@ initBranch :: [Formula] -> Branch
 initBranch forms = addToBranchList forms $ Branch 1 [] [] $ initPriority [isDoubleNeg, isAlpha, isBeta, isDelta, isGamma]
 
 elemsOnBranch :: Branch -> [Formula]
-elemsOnBranch branch = posAtom branch ++ negAtom branch ++ toListPriority (forms branch)
+elemsOnBranch branch = posAtom branch ++ (map neg $ negAtom branch) ++ toListPriority (forms branch)
 
 isBranchClosed :: Branch -> Bool
 isBranchClosed branch = not $ null $ mapMaybe (uncurry unifyF) $ pairAtomics (posAtom branch) (negAtom branch)
@@ -146,7 +146,7 @@ data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], u
 
 data Report = Valid Record
             | Counter [Formula]
-            | ExceedSteps Record
+            | ExceedSteps [Formula]
     deriving (Show)
 
 -- Precond: A list of FOL formulas that have been normalized
@@ -215,7 +215,28 @@ closedTableau :: Tableau -> Report
 closedTableau tableau = Valid $ record tableau
 
 outOfSteps :: Tableau -> Report
-outOfSteps tableau = ExceedSteps $ record tableau
+outOfSteps tableau = ExceedSteps $ outOfStepsCounterExample forms
+    where
+        branch = fst $ fromJust $ popQueue $ unfinished tableau
+        forms = posAtom branch ++ map neg (negAtom branch)
+
+outOfStepsCounterExample :: [Formula] -> [Formula]
+outOfStepsCounterExample ls = snd $ mapAccumL compress (Just mempty) fullList
+    where
+        eqAtomics :: Formula -> Formula -> Ordering
+        eqAtomics (Atomic p _) (Atomic q _) = compare p q
+        eqAtomics (Neg (Atomic _ _)) (Atomic _ _) = GT
+        eqAtomics (Atomic _ _) (Neg (Atomic _ _)) = LT
+        eqAtomics (Neg f) (Neg g) = eqAtomics f g
+
+        fullList :: [[Formula]]
+        fullList = groupBy (\p -> \q -> eqAtomics p q == EQ) $ sortBy eqAtomics ls
+
+        compress :: Maybe Subst -> [Formula] -> (Maybe Subst, Formula)
+        compress Nothing _ = (Nothing, Atomic "" [])
+        compress (Just s) ls = (s', maybe (Atomic "" []) (\sub -> substF sub $ head ls) $ s')
+            where
+                s' = unifyList s (head ls) (tail ls)
 
 defaultMaxSteps = 100
 
