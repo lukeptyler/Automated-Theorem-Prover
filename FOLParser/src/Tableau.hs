@@ -141,13 +141,26 @@ stepBranch f
     | isBeta f      = expandBeta f
     | isGamma f     = expandGamma f
 
-data Tableau = Tableau {maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch, record :: Record}
+data Tableau = Tableau {initialSteps :: Int, maxSteps :: Int, open :: [Branch], closed :: [Branch], unfinished :: Queue Branch, record :: Record}
     deriving (Show)
 
 data Report = Valid Record
-            | Counter [Formula]
-            | ExceedSteps [Formula]
+            | Counter [Formula] Record
+            | ExceedSteps Int [Formula]
     deriving (Show)
+
+data Theorem = Theorem {props :: [Formula], conc :: Formula}
+
+instance Show Theorem where
+    show theorem = intercalate "\n" (zipWith (++) (map (\i -> show i ++ ":" ++ replicate (indexLen - 1 - length (show i)) ' ') [1..length (props theorem)]) 
+                                                  (map show $ props theorem)) ++ 
+                   "\n" ++ replicate (maxFormLen + indexLen) '-' ++ 
+                   "\n" ++ replicate indexLen ' ' ++ show (conc theorem)
+        where
+            maxFormLen = (maximum $ map (length . show) $ conc theorem : props theorem)
+            indexLen   = 2 + length (show $ length (props theorem) + 1)
+
+emptyTheorem = Theorem [] $ Atomic "" []
 
 -- Precond: A list of FOL formulas that have been normalized
 initTableau :: Int -> [Formula] -> Tableau
@@ -157,7 +170,7 @@ initTableau maxSteps forms
     | otherwise             = blankTableau {unfinished = initQueue [branch]}
     where 
         branch = initBranch forms
-        blankTableau = Tableau maxSteps [] [] (initQueue []) (Record branch (elemsOnBranch branch) [])
+        blankTableau = Tableau maxSteps maxSteps [] [] (initQueue []) (Record branch (elemsOnBranch branch) [])
 
 isTableauClosed :: Tableau -> Bool
 isTableauClosed tableau = not (isTableauOpen tableau) && isEmptyQueue (unfinished tableau)
@@ -202,20 +215,20 @@ runTableau :: Tableau -> Maybe Report
 runTableau tableau
     | isTableauOpen   tableau = return $ counterExample tableau
     | isTableauClosed tableau = return $ closedTableau  tableau
-    | maxSteps tableau == 0   = return $ outOfSteps     tableau
+    | maxSteps tableau < 0    = return $ outOfSteps     tableau
     | otherwise               = do tableau' <- stepTableau tableau
                                    runTableau tableau'
-
-counterExample :: Tableau -> Report
-counterExample tableau = Counter $ posAtom openBranch ++ (map neg $ negAtom openBranch)
-    where
-        openBranch = head $ open tableau
 
 closedTableau :: Tableau -> Report
 closedTableau tableau = Valid $ record tableau
 
+counterExample :: Tableau -> Report
+counterExample tableau = Counter (posAtom openBranch ++ (map neg $ negAtom openBranch)) $ record tableau
+    where
+        openBranch = head $ open tableau
+
 outOfSteps :: Tableau -> Report
-outOfSteps tableau = ExceedSteps $ outOfStepsCounterExample forms
+outOfSteps tableau = ExceedSteps (initialSteps tableau) $ outOfStepsCounterExample forms
     where
         branch = fst $ fromJust $ popQueue $ unfinished tableau
         forms = posAtom branch ++ map neg (negAtom branch)
@@ -245,11 +258,11 @@ defaultMaxSteps = 100
 --  normalize premizes and neg conclusion
 --  initTableau with premises and neg conclusion
 --  if tableau is closed or open, report
-proveTheorem :: [Formula] -> Formula -> Maybe Report
+proveTheorem :: Theorem -> Maybe Report
 proveTheorem = proveTheoremMaxSteps defaultMaxSteps
 
-proveTheoremMaxSteps :: Int -> [Formula] -> Formula -> Maybe Report
-proveTheoremMaxSteps maxSteps prem conc = runTableau $ (initTableau maxSteps) $ normalizeList $ prem ++ [neg conc]
+proveTheoremMaxSteps :: Int -> Theorem -> Maybe Report
+proveTheoremMaxSteps maxSteps (Theorem prem conc) = runTableau $ (initTableau maxSteps) $ normalizeList $ prem ++ [neg conc]
 
 proveTautology :: Formula -> Maybe Report
 proveTautology = proveTautologyMaxSteps defaultMaxSteps
@@ -264,7 +277,7 @@ instance Show Record where
     show = printRecord
 
 printRecord :: Record -> String
-printRecord record = '\n' : (unlines $ printRecord' "" (True,record))
+printRecord record = unlines $ printRecord' "" (True,record)
     where
         printRecord' :: String -> (Bool,Record) -> [String]
         printRecord' indent (last,record) = (indent ++ nextStart ++ (intercalate ", " $ map show (recForms record))) : (concatMap (printRecord' $ indent ++ nextIndent) $ zip (reverse $ True:replicate ((length $ recChildren record) - 1) False) $ recChildren record)

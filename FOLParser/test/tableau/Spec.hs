@@ -1339,11 +1339,9 @@ validPropositionalTautologies = [
             𝜆 = proposition "𝜆"
             𝜅 = proposition "𝜅"
 
-data Theorem = Theorem [Formula] Formula
-instance Show Theorem where
-    show (Theorem prem conc) = (intercalate ", " $ map show prem) ++ " ⊢ " ++ show conc
+prettyTheorem (Theorem prem conc) = (intercalate ", " $ map show prem) ++ " ⊢ " ++ show conc
 
-theoremTest   steps pref property t@(Theorem prem conc) = it (pref ++ show t) $ proveTheoremMaxSteps steps prem conc `shouldSatisfy` property
+theoremTest   steps pref property theorem = it (pref ++ prettyTheorem theorem) $ proveTheoremMaxSteps steps theorem `shouldSatisfy` property
 tautologyTest steps pref property taut = it (pref ++ show taut) $ proveTautologyMaxSteps steps taut `shouldSatisfy` property
 
 valid (Just (Valid _)) = True
