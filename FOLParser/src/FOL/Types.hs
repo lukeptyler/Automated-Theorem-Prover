@@ -27,12 +27,14 @@ instance Show Quantifier where
     show All  = "all "
     show Some = "some "
 
-data Formula = Atomic PredId [Term]
+data Formula = Null
+             | Atomic PredId [Term]
              | Neg    Formula
              | Binary BinaryOp Formula Formula
              | Quant  {quan::Quantifier, iden::VarId, form::Formula}
     deriving (Eq)
 instance Show Formula where
+    show Null            = ""
     show (Atomic p [])   = p
     show (Atomic p ts)   = p ++ "(" ++ intercalate "," (map show ts) ++ ")"
     show (Neg f)         = "-" ++ show_ f ++ ""
@@ -47,6 +49,13 @@ show__ qu@(Quant _ _ _) = show qu
 show__ f = "(" ++ show f ++ ")"
 
 -- Formula Constructors --
+
+nullFormula :: Formula
+nullFormula = Null
+
+isNullFormula :: Formula -> Bool
+isNullFormula Null = True
+isNullFormula _    = False
 
 constant :: VarId -> Term
 constant id = Function id []

@@ -146,10 +146,11 @@ data Tableau = Tableau {initialSteps :: Int, maxSteps :: Int, open :: [Branch], 
 
 data Report = Valid Record
             | Counter [Formula] Record
-            | ExceedSteps Int [Formula]
+            | ExceedSteps Int [Formula] Tableau
     deriving (Show)
 
 data Theorem = Theorem {props :: [Formula], conc :: Formula}
+    deriving (Eq)
 
 instance Show Theorem where
     show theorem = intercalate "\n" (zipWith (++) (map (\i -> show i ++ ":" ++ replicate (indexLen - 1 - length (show i)) ' ') [1..length (props theorem)]) 
@@ -160,7 +161,8 @@ instance Show Theorem where
             maxFormLen = (maximum $ map (length . show) $ conc theorem : props theorem)
             indexLen   = 2 + length (show $ length (props theorem) + 1)
 
-emptyTheorem = Theorem [] $ Atomic "" []
+emptyTheorem :: Theorem
+emptyTheorem = Theorem [] nullFormula
 
 -- Precond: A list of FOL formulas that have been normalized
 initTableau :: Int -> [Formula] -> Tableau
@@ -228,7 +230,7 @@ counterExample tableau = Counter (posAtom openBranch ++ (map neg $ negAtom openB
         openBranch = head $ open tableau
 
 outOfSteps :: Tableau -> Report
-outOfSteps tableau = ExceedSteps (initialSteps tableau) $ outOfStepsCounterExample forms
+outOfSteps tableau = ExceedSteps (initialSteps tableau) (outOfStepsCounterExample forms) tableau
     where
         branch = fst $ fromJust $ popQueue $ unfinished tableau
         forms = posAtom branch ++ map neg (negAtom branch)
@@ -269,6 +271,12 @@ proveTautology = proveTautologyMaxSteps defaultMaxSteps
 
 proveTautologyMaxSteps :: Int -> Formula -> Maybe Report
 proveTautologyMaxSteps maxSteps taut = runTableau $ initTableau maxSteps [normalize $ neg taut]
+
+continueTableau :: Tableau -> Maybe Report
+continueTableau = continueTableauMaxSteps defaultMaxSteps
+
+continueTableauMaxSteps :: Int -> Tableau -> Maybe Report
+continueTableauMaxSteps moreSteps tableau = runTableau $ tableau {initialSteps = moreSteps + initialSteps tableau, maxSteps = moreSteps}
 
 -- Tableau Record --
 
