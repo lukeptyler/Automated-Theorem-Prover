@@ -71,6 +71,9 @@ matchSpaces = Match $ \str -> Just $ span isSpace str
 matchUntil :: (Char -> Bool) -> Match String
 matchUntil cond = Match $ \str -> return $ break cond str
 
+matchUntilEof :: Match String
+matchUntilEof = Match $ \str -> return (str, "")
+
 matchEmpty :: Match String
 matchEmpty = Match $ \str -> if null str
                              then Just ("","")
