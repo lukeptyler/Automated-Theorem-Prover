@@ -53,6 +53,9 @@ matchCond cond = Match $ \str -> case str of
 matchChar :: Char -> Match Char
 matchChar c = matchCond (== c)
 
+matchCharIn :: String -> Match Char
+matchCharIn str = matchCond (`elem` str)
+
 matchLower :: Match Char
 matchLower = matchCond isLower
 
@@ -65,19 +68,26 @@ matchStr = mapM matchChar
 matchNum :: Match String
 matchNum = Match $ \str -> Just $ span isDigit str
 
+matchInt :: Match Int
+matchInt = do n <- matchNum
+              return $ (read n :: Int)
+
 matchSpaces :: Match String
 matchSpaces = Match $ \str -> Just $ span isSpace str
 
-matchUntil :: (Char -> Bool) -> Match String
-matchUntil cond = Match $ \str -> return $ break cond str
+matchUntil :: Match a -> Match String
+matchUntil matchCondition = Match $ scan ""
+    where
+        scan :: String -> String -> Maybe (String, String)
+        scan matched "" = Just (matched, "")
+        scan matched str@(c:cs) = case match matchCondition str of
+                               Nothing -> scan (matched ++ [c]) cs
+                               _       -> Just (matched, str) 
 
-matchUntilEof :: Match String
-matchUntilEof = Match $ \str -> return (str, "")
-
-matchEmpty :: Match String
-matchEmpty = Match $ \str -> if null str
-                             then Just ("","")
-                             else Nothing
+matchEof :: Match String
+matchEof = Match $ \str -> if null str
+                           then Just ("","")
+                           else Nothing
 
 lookAhead :: Char -> Match Bool
 lookAhead c = Match $ \str -> maybe 
@@ -85,8 +95,8 @@ lookAhead c = Match $ \str -> maybe
                               (\(h,_) -> Just (c==h,str)) $ 
                               uncons str
 
-eof :: Match Bool
-eof = Match $ \str -> if null str then Just (True,"") else Just (False,str)
+isEof :: Match Bool
+isEof = Match $ \str -> if null str then Just (True,"") else Just (False,str)
 
 matchVarId :: Match VarId
 matchVarId = (:) <$> matchLower <*> matchNum
@@ -101,10 +111,10 @@ matchGroup = do start <- lookAhead '('
                 else return ""
     
 matchInside :: Match String
-matchInside = do err <- eof
+matchInside = do err <- isEof
                  if err
                  then empty
-                 else do inside <- matchUntil (`elem` "()")
+                 else do inside <- matchUntil $ matchCharIn "()"
                          end <- lookAhead ')'
                          if end 
                          then (inside ++) <$> matchStr ")" 
@@ -153,9 +163,9 @@ matchAtomic = do pred <- matchPredId
                  hasGroup <- lookAhead '('
                  if hasGroup
                  then do terms <- matchTermList
-                         _ <- matchEmpty
+                         _ <- matchEof
                          return $ Atomic pred terms
-                 else do _ <- matchEmpty
+                 else do _ <- matchEof
                          return $ Atomic pred []
 
 matchTermList :: Match [Term]
@@ -194,7 +204,7 @@ type ParseStep = Parser -> ParseResult
 data Precedence = Prec {prec :: Int, leftAssoc :: Bool}
 
 tokenize :: Match [Token]
-tokenize = Match $ \str -> if null str
+tokenize = Match $ \str -> if null $ filter (not . isSpace) str
                            then Just ([], "")
                            else match ((:) <$> matchToken <*> tokenize) str
 

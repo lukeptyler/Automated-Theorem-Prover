@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c4e4fc77cd1f9018d9f6b8b81025df878b86798464fbb3eb8cdfb3c1af2a332f
+-- hash: d34e39abd7d40397e74bfa05c297fdd2e8d3b5374c4e36897435e5a5d33c1542
 
 name:           FOLParser
 version:        0.1.0.0
@@ -45,6 +45,7 @@ library
     , containers
     , directory
     , filepath
+    , split
   default-language: Haskell2010
 
 executable FOLParser-exe
@@ -60,6 +61,7 @@ executable FOLParser-exe
     , containers
     , directory
     , filepath
+    , split
   default-language: Haskell2010
 
 test-suite tableau-tests
@@ -77,6 +79,7 @@ test-suite tableau-tests
     , directory
     , filepath
     , hspec
+    , split
   default-language: Haskell2010
 
 test-suite utility-tests
@@ -96,4 +99,5 @@ test-suite utility-tests
     , filepath
     , hspec
     , hspec-core
+    , split
   default-language: Haskell2010

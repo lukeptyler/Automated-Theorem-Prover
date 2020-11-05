@@ -140,3 +140,27 @@ extractBeta (Binary Imp      l r)  = (Neg l, r)
 extractQuant :: Formula -> (VarId, Formula)
 extractQuant (Quant      _ id f)  = (id, f)
 extractQuant (Neg (Quant _ id f)) = (id, neg f)
+
+-- Theorems --
+data TheoremDisplay = Stack | List
+    deriving (Eq)
+
+data Theorem = Theorem {props :: [Formula], conc :: Formula, display :: TheoremDisplay}
+    deriving (Eq)
+
+instance Show Theorem where
+    show theorem
+        | display theorem == Stack = intercalate "\n" (zipWith (++) (map (\i -> show i ++ ":" ++ replicate (indexLen - 1 - length (show i)) ' ') [1..length (props theorem)]) 
+                                                      (map show $ props theorem)) ++ 
+                                     "\n" ++ replicate (maxFormLen + indexLen) '-' ++ 
+                                     "\n" ++ replicate indexLen ' ' ++ show (conc theorem)
+        | display theorem == List  = intercalate "; " (map show $ props theorem) ++ (if null (props theorem) then "" else " ") ++ "⊢ " ++ show (conc theorem)
+        where
+            maxFormLen = (maximum $ map (length . show) $ conc theorem : props theorem)
+            indexLen   = 2 + length (show $ length (props theorem) + 1)
+
+emptyTheorem :: Theorem
+emptyTheorem = Theorem [] nullFormula Stack
+
+isValidTheorem :: Theorem -> Bool
+isValidTheorem (Theorem _ conc _) = conc == nullFormula

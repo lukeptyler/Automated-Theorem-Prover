@@ -149,21 +149,6 @@ data Report = Valid Record
             | ExceedSteps Int [Formula] Tableau
     deriving (Show)
 
-data Theorem = Theorem {props :: [Formula], conc :: Formula}
-    deriving (Eq)
-
-instance Show Theorem where
-    show theorem = intercalate "\n" (zipWith (++) (map (\i -> show i ++ ":" ++ replicate (indexLen - 1 - length (show i)) ' ') [1..length (props theorem)]) 
-                                                  (map show $ props theorem)) ++ 
-                   "\n" ++ replicate (maxFormLen + indexLen) '-' ++ 
-                   "\n" ++ replicate indexLen ' ' ++ show (conc theorem)
-        where
-            maxFormLen = (maximum $ map (length . show) $ conc theorem : props theorem)
-            indexLen   = 2 + length (show $ length (props theorem) + 1)
-
-emptyTheorem :: Theorem
-emptyTheorem = Theorem [] nullFormula
-
 -- Precond: A list of FOL formulas that have been normalized
 initTableau :: Int -> [Formula] -> Tableau
 initTableau maxSteps forms
@@ -264,7 +249,7 @@ proveTheorem :: Theorem -> Maybe Report
 proveTheorem = proveTheoremMaxSteps defaultMaxSteps
 
 proveTheoremMaxSteps :: Int -> Theorem -> Maybe Report
-proveTheoremMaxSteps maxSteps (Theorem prem conc) = runTableau $ (initTableau maxSteps) $ normalizeList $ prem ++ [neg conc]
+proveTheoremMaxSteps maxSteps (Theorem prem conc _) = runTableau $ (initTableau maxSteps) $ normalizeList $ prem ++ [neg conc]
 
 proveTautology :: Formula -> Maybe Report
 proveTautology = proveTautologyMaxSteps defaultMaxSteps
