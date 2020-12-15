@@ -5,6 +5,7 @@ import Data.Char (isLower, isUpper, isDigit, isSpace)
 import Data.List (isPrefixOf, isInfixOf, uncons)
 import Data.Either (isLeft)
 import Control.Applicative (Alternative(..))
+import Control.Monad (guard)
 
 data Token = AtomicToken String
            | NegToken
@@ -70,6 +71,7 @@ matchNum = Match $ \str -> Just $ span isDigit str
 
 matchInt :: Match Int
 matchInt = do n <- matchNum
+              guard (not $ null n)
               return $ (read n :: Int)
 
 matchSpaces :: Match String

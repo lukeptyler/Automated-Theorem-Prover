@@ -16,16 +16,16 @@ instance Show Term where
 data BinaryOp = And | Or | Imp | Bicond
     deriving (Eq)
 instance Show BinaryOp where
-    show And    = " & "
-    show Or     = " | "
-    show Imp    = " -> "
-    show Bicond = " <-> "
+    show And    = " ∧ "
+    show Or     = " ∨ "
+    show Imp    = " → "
+    show Bicond = " ↔ "
 
 data Quantifier = All | Some
     deriving (Eq)
 instance Show Quantifier where
-    show All  = "all "
-    show Some = "some "
+    show All  = "∀"
+    show Some = "∃"
 
 data Formula = Null
              | Atomic PredId [Term]

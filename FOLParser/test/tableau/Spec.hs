@@ -14,12 +14,12 @@ main :: IO()
 main = hspec $ do 
       describe "MetaMath" $ do
             describe ("Valid Propositional Theorems (" ++ show (length validPropositionalTheorems) ++ ")") $ do
-                  foldl1 (>>) $ map (theoremTest 100 "" valid . uncurry Theorem) $ nub validPropositionalTheorems
+                  foldl1 (>>) $ map (\(prems,conc) -> theoremTest 100 "" valid $ Theorem prems conc List) $ nub validPropositionalTheorems
             describe ("Valid Propositional Tautologies (" ++ show (length validPropositionalTautologies) ++ ")") $ do
                   foldl1 (>>) $ map (tautologyTest 100 "" valid) $ nub validPropositionalTautologies
 
       describe "Selections from \"Seventy-Five Problems for Testing Automatic Theorem Provers\"" $ do
-                  foldl1 (>>) $ map (\(num, steps, test) -> either (theoremTest steps num valid . uncurry Theorem) (tautologyTest steps num valid) test) seventyFiveTests
+                  foldl1 (>>) $ map (\(num, steps, test) -> either (\(prems,conc) -> theoremTest steps num valid $ Theorem prems conc List) (tautologyTest steps num valid) test) seventyFiveTests
 
 -- Tests from Seventy-Five Problems for Testing Automatic Theorem Provers
 -- Tests marked with * require additional axioms of equality
@@ -1339,7 +1339,7 @@ validPropositionalTautologies = [
             𝜆 = proposition "𝜆"
             𝜅 = proposition "𝜅"
 
-prettyTheorem (Theorem prem conc) = (intercalate ", " $ map show prem) ++ " ⊢ " ++ show conc
+prettyTheorem (Theorem prem conc _) = (intercalate ", " $ map show prem) ++ " ⊢ " ++ show conc
 
 theoremTest   steps pref property theorem = it (pref ++ prettyTheorem theorem) $ proveTheoremMaxSteps steps theorem `shouldSatisfy` property
 tautologyTest steps pref property taut = it (pref ++ show taut) $ proveTautologyMaxSteps steps taut `shouldSatisfy` property
